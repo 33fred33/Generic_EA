@@ -25,30 +25,46 @@ class EA:
             experiment_name = None,
             algorithm = None,
             selection_method = "tournament",
+            evolution_strategy = "1+1"
             ):
 		"""
 		algorithm can be NSGAII, SPEA2
+		selection method can be tournament, random_uniform
 		"""
+		#assign
 		self.toolbox = toolbox
 		self.experiment_name = experiment_name
-		self.algorithm = algorithm
+		self.selection_method = selection_method
 
+		#initialisation
 		self.total_generations = 0
+		self.population = []
 
-	def run_generations(n = 1, evolution_strategy = "1+1", l = 0.5):
+		#defaults
+		if algorithm == "NSGAII":
+			#self.evolution_strategy 
+			pass
+		elif algorithm == "SPEA2":
+			#self.evolution_strategy 
+			pass
+
+	def run_generations(n = 1, evolution_strategy = None, es_lambda = None):
+		if evolution_strategy is None: evolution_strategy = self.evolution_strategy
+		if es_lambda is None: es_lambda = self.es_lambda
+
 		for generation in range(n):
 			if evolution_strategy == "1+1":
-				self.evaluate_population()
 				self.offsprings_generation()
+				self.evaluate_population()
 			elif evolution_strategy == "1+l":
 				self.evaluate_population()
 				self.offsprings_generation()
 
 			self.store_population()
-			self.total_generations += n
+			self.total_generations += 1
 
 	def initialise_population(n = 100, method):
-		toolbox.initialise_population()
+		toolbox.initialise_population(n)
 
 	def select individual(self, n = 1, selection_method = None, tournament_size = 3):
 		if selection_method is None: selection_method = self.selection_method 
@@ -62,7 +78,128 @@ class EA:
 	def get_best(n = 1, criteria = "fitness"):
 		pass
 
+	def select(n = 1, population = None, method = None):
+		if method is None: method = self.selection_method
+		if population is None: population = self.population
+		selection = []
 
+		return selection
+
+	def fast_nondominated_sort(population = None):
+		"""
+		Originaly from the NSGA-II algorithm.
+		"""
+		if population is None: population = self.population
+
+		current_front = []
+		for individual_index, individual in enumerate(population):
+			individual.n_dominators = 0           #pending: check if needs to be refreshed
+			individual.dominated_solutions = []   #pending: check if needs to be refreshed
+			for q_individual in population:
+				if self.dominates(individual, q_individual):
+					individual.dominated_solutions.append(q_individual)
+				elif self.dominates(q_individual, individual):
+					individual.n_dominators += 1
+			if individual.n_dominators == 0:
+				current_front.append(individual)
+		front = 0
+		while current_front != []:
+			new_list = []
+			for individual in current_front:
+				individual.non_domination_rank = front
+				for dominated_individual in individual.dominated_solutions:
+					dominated_individual.n_dominators -= 1
+					if dominated_individual.n_dominators == 0:
+						new_list.append(dominated_individual)
+			front += 1
+			current_front = new_list
+
+	def set_local_crowding_distances(population = None):
+		"""
+		Originaly from the NSGA-II algorithm.
+		"""
+		if population is None: population = self.population
+		for individual in population:
+			individual.local_crowding_distance = 0
+
+		for objective_index in range(len(population[0].objective_values)):
+			sorted_population = sorted(population, key=lambda individual: individual.objective_values[objective_index])
+			sorted_population[0].local_crowding_distance = np.inf
+			sorted_population[-1].local_crowding_distance = np.inf
+			for individual_index, individual in enumerate(sorted_population[1:-1]):
+				individual.local_crowding_distance += (sorted_population[individual_index + 1] - sorted_population[individual_index - 1]) 
+
+
+	def dominates(individual1, individual2):
+		"""
+		Boolean, pareto dominance. Individual 1 dominates individual 2?
+		"""
+		assert isinstance(individual1.objective_values, list) and isinstance(individual2.objective_values, list), "Individuals have no objective values"
+		assert len(individual1.objective_values) == len(individual2.objective_values), "Individuals got different number of objective values"
+		for objective_index in range(len(individual1.objective_values)):
+			if individual1.objective_values[objective_index] <= individual2.objective_values[objective_index]:
+				return False
+		return True
+
+
+
+
+
+class Individual:
+	def __init__(
+		self, 
+		generation_of_creation = None,
+		parents_species = None,
+		genotype = None, 
+		phenotype = None,
+		fitness_value = None,
+		objective_values = None,             #used in MOEA
+		n_dominators = None,                 #used in MOEA, pareto dominance
+		n_dominated_solutions = None,        #used in MOEA, pareto dominance
+		dominated_solutions = None,          #used in NSGA-II
+		local_crowding_distance = None,      #used in NSGA-II
+		non_domination_rank = None,          #used in NSGA-II
+		comparison_operator = "fitness"):
+		"""
+		comparison_operator can be fitness, crowded_comparison_operator
+		"""
+
+		self.generation_of_creation = generation_of_creation,
+		self.parents_speceis = parents_speceis,
+		self.genotype = genotype
+		self.phenotype = phenotype
+		self.n_dominators = n_dominators
+		self.n_dominated_solutions = n_dominated_solutions
+		self.dominated_solutions = dominated_solutions
+		self.objective_values = objective_values
+		self.fitness_value = fitness_value
+		self.local_crowding_distance = local_crowding_distance
+		self.non_domination_rank = non_domination_rank
+		self.comparison_operator = comparison_operator
+
+	def __lt__(self, other): #less than
+
+		if comparison_operator == "fitness":
+			return self.fitness_value < other.fitness_value
+
+		elif comparison_operator == "crowded_comparison_operator": #used in NSGA-II
+			if self.non_domination_rank < other.non_domination_rank:
+				return True
+			elif self.non_domination_rank > other.non_domination_rank:
+				return False
+			else:
+				return self.local_crowding_distance > other.local_crowding_distance:
+    
+    def __eq__(self, other):
+        
+        if comparison_operator == "fitness":
+			return self.fitness_value == other.fitness_value
+
+		elif comparison_operator == "crowded_comparison_operator": #used in NSGA-II
+			if self.non_domination_rank != other.non_domination_rank:
+				return False
+			else:
+				return self.local_crowding_distance == other.local_crowding_distance:
 
 
 
@@ -84,20 +221,17 @@ class GP_Toolbox:
 
 	self.terminal = []
 	for terminal in terminals:
-
 		if terminal == "random_constant":
 			self.terminals.append(self.get_random_constant)
 			self.random_constant_lower_limit = -1
 			self.random_constant_upper_limit = 1
 			print("Default warning (GP_Toolbox): Variables random_constant_lower_limit and random_constant_upper_limit\
 			 to be used in the terminal random constant generation process are set to -1 and 1 as default.")
-
 		if terminal == "random_input_index":
 			self.terminals.append(self.get_random_input_index)
 
 	self.functions = []
 	for function in functions:
-
 		if function == "add": functions.append(operator.add)
 	    elif function == "sub": functions.append(operator.sub)
 	    elif function == "mul": functions.append(operator.mul)
@@ -198,10 +332,9 @@ class GP_Node:
     
     def copy(self, parent=None):
         """
-        Don't give arguments
-        Returns an unrelated new item with the same characteristics
+        Don't give arguments. Returns an unrelated new item with the same characteristics
         """       
-        the_copy = Node(self.content, parent = parent)
+        the_copy = GP_Node(self.content, parent = parent)
         if not self.is_terminal():
             for child in self.children:
                the_copy.children.append(child.copy(parent = the_copy))
