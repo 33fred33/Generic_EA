@@ -11,6 +11,7 @@ import numpy as np
 import random as rd
 import operator
 import math
+from inspect import signature
 
 
 
@@ -21,12 +22,17 @@ import math
 class GP_Toolbox:
 	def __init__(
         self,
-        terminals = ["random_constant", "random_input_index"],
-        functions = ["add","sub","mul", "safe_divide_zero"],
+        terminals = ["constant", "input_index"], #if more are added, check terminals dependencies
+        teminal_generation_method = "uniform",
+        terminals_probabilities = (0.5, 0.5),
+        operations = ["add","sub","mul", "safe_divide_zero"],
         input_variable_count = 1):
 		"""
-		terminal options: random_constant, random_input_index
-		function options: and, sub, mul, safe_divide_zero, safe_divide_numerator, signed_if, sin, cos, and, or, if, not
+		terminals options: random_constant, random_input_index
+		teminal_generation_method can be uniform, by_probability
+		terminals_probabilities is only used if teminal_generation_method is by_probability
+		it is a tuple of float numbers with length equal to terminals, total must equal 1
+		operations options: and, sub, mul, safe_divide_zero, safe_divide_numerator, signed_if, sin, cos, and, or, if, not
 		"""
 
 		self.terminals = []
@@ -37,38 +43,160 @@ class GP_Toolbox:
 				self.random_constant_upper_limit = 1
 			if terminal == "random_input_index":
 				self.terminals.append(self.get_random_input_index)
+		self.teminal_generation_method = teminal_generation_method
+		self.terminals_probabilities = terminals_probabilities
 
 		self.functions = []
-		for function in functions:
-			if function == "add": functions.append(operator.add)
-			elif function == "sub": functions.append(operator.sub)
-			elif function == "mul": functions.append(operator.mul)
-			elif function == "safe_divide_numerator": functions.append(self.safe_divide_numerator)
-			elif function == "safe_divide_zero": functions.append(self.safe_divide_zero)
-			elif function == "signed_if": functions.append(self.signed_if)
-			elif function == "sin": functions.append(math.sin)
-			elif function == "cos": functions.append(math.cos)
-			elif function == "and": functions.append(operator.and_)
-			elif function == "or": functions.append(operator.or_)
-			elif function == "if": functions.append(self.boolean_if)
-			elif function == "not": functions.append(operator.not_)
+		for operation in operations:
+			if operation == "add": operations.append(operator.add)
+			elif operation == "sub": operations.append(operator.sub)
+			elif operation == "mul": operations.append(operator.mul)
+			elif operation == "safe_divide_numerator": operations.append(self.safe_divide_numerator)
+			elif operation == "safe_divide_zero": operations.append(self.safe_divide_zero)
+			elif operation == "signed_if": operations.append(self.signed_if)
+			elif operation == "sin": operations.append(math.sin)
+			elif operation == "cos": operations.append(math.cos)
+			elif operation == "and": operations.append(operator.and_)
+			elif operation == "or": operations.append(operator.or_)
+			elif operation == "if": operations.append(self.boolean_if)
+			elif operation == "not": operations.append(operator.not_)
 
 		self.input_variable_count = input_variable_count
 		
+	#construction methods
+	def generate_terminal(self, 
+			terminal_type = None, 
+			random_constant_lower_limit = None, 
+			random_constant_upper_limit = None, 
+			terminal_generation_method = None, 
+			terminals_probabilities = None):
+		"""
+		terminal_type options: constant, input_index. Can be one or more depending on the generation method
+		terminal_generation_method can be uniform, by_probability
+		terminals_probabilities is only used if terminal_generation_method is by_probability
+		it is a tuple of float numbers with length equal to terminals, total must equal 1
+		returns content_type, content
+		"""
+		if terminal_type is None:
+			if terminal_generation_method == "uniform":
+				terminal_type = self.terminals
+			else:
+				assert len(self.terminals) > 1, "Wrong terminal generation path"
+				terminal_type = self.terminals[0]
+		if terminal_generation_method is None: terminal_generation_method = self.terminal_generation_method
+		if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
 
-	def get_random_constant(self, lower_limit = None, upper_limit = None):
-		if lower_limit is None: lower_limit = self.random_constant_lower_limit
-		if upper_limit is None: upper_limit = self.random_constant_upper_limit
-		return np.random.uniform(lower_limit, upper_limit)
+		if terminal_generation_method == "uniform":
+			options = []
+			for t in terminal_type:
+				if t == "constant": options.append(t)
+				elif t == "input_index": options.extend([t for _ in range(self.input_variable_count)])
+			choice = rd.choice(options)
 
-	def get_random_input_index(self):
-		if self.input_variable_count == 1:
-			return 0
+		elif terminal_generation_method == "by_probability":
+			temporal = np.random.uniform()
+			index = 0
+			accumulative_probability = terminals_probabilities[index]
+			while temporal >= accumulative_probability:
+				index += 1
+				accumulative_probability += terminals_probabilities[index]
+			choice = terminal_type[index]
+
+
+		if choice == "constant":
+			if random_constant_lower_limit is None: random_constant_lower_limit = self.random_constant_lower_limit
+			if random_constant_upper_limit is None: random_constant_upper_limit = self.random_constant_upper_limit
+			return "constant", np.random.uniform(random_constant_lower_limit, random_constant_upper_limit)
+
+		elif choice == "input_index":
+			return "input_index", rd.randint(0, self.input_variable_count - 1)
+
+	def generate_automatic_terminal(self, terminals = None, teminal_generation_method = None, terminals_probabilities = None):
+
 		else:
-			return rd.randint(0, self.input_variable_count - 1)
+			if teminal_generation_method == "uniform":
+				if terminals == ["random_constant", "random_input_index"]: #terminals dependent
+					temporal = rd.randint(0, input_variable_count)
+					if temporal == input_variable_count:
+						content_type, content = self.generate_terminal(terminal_type = "random_constant")
+						return content_type, content 
+					else:
+						content_type, content = self.generate_terminal(terminal_type = "random_input_index")
+						return content_type, content
+
+			if teminal_generation_method == "by_probability":
+				temporal = np.random.uniform()
+				index = 0
+				accumulative_probability = terminals_probabilities[index]
+				while temporal >= accumulative_probability:
+					index += 1
+					accumulative_probability += terminals_probabilities[index]
+				content_type, content = self.generate_terminal(terminal_type = terminals[index])
+				return content_type, content
+
+	def generate_operator(self):
+		return rd.choice(self.operations)
+
+	def get_arity(self, operator):
+		sig = signature(operator)
+        arity = len(sig.parameters)
+		return arity
+
+	def generate_individual(self, max_depth, method, parent = None, depth = 0):
+		"""
+		method can be full or grow
+		"""
+		if depth == max_depth - 1:
+			content_type, content = self.generate_automatic_terminal()
+			return GP_Node(content, parent = parent, content_type = content_type)
+		else:
+
+			if method == "full":
+				operator = self.generate_operator()
+				arity = get_arity(operator)
+				node = GP_Node(operator, parent = parent, content_type = "operator")
+				for _ in range(arity):
+					node.children.append(self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1))
+				return node
+
+			if method == "grow":
+				if rd.choice([True, False]) or depth == 0:
+					operator = self.generate_operator()
+					arity = get_arity(operator)
+					node = GP_Node(operator, parent = parent, content_type = "operator")
+					for _ in range(arity):
+						node.children.append(self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1))
+					return node
+				else:
+					content_type, content = self.generate_automatic_terminal()
+					return GP_Node(content, parent = parent, content_type = content_type)
+
+		assert True, "Wrong method to generate individual"
+
+	#evaluations
+	def evaluate(self, node, data):
+		"""
+		evaluates the tree with the given data
+		"""
+        if not node.is_terminal():
+        	assert node.content_type == "function", "Non-terminal node has non-operation content!"
+            arguments = [self.evaluate(child, data) for child in node.children]
+            return node.content(*arguments)
+        elif node.content == "data_index"
+            return data[node.content]
+        else:
+            return node.content
+
+    def mutate(self, type = "subtree"):
+    	"""
+    	type can be subtree, single_node
+    	"""
+    	new_individual = parent.copy()
+    	if type == "subtree":
+    		pass
 
 
-	#Functions
+	#Operations
 	def safe_divide_numerator(a, b):
 	    """
 	    Executes a/b. If b=0, returns a
@@ -97,8 +225,12 @@ class GP_Toolbox:
 
 
 class GP_Node:
-    def __init__(self, content, *children, parent = None,):
+    def __init__(self, content, *children, parent = None, content_type = None):
+    	"""
+    	content_type can be constant, input_index, operation
+    	"""
         self.content = content
+        self.content_type = content_type
         self.parent = parent
         self.children = []
         for child in children:
@@ -194,7 +326,8 @@ class EA:
             experiment_name = None,
             algorithm = None,
             selection_method = "tournament",
-            evolution_strategy = "1+1"
+            evolution_strategy = "1+1",
+            input_variable_count = 1
             ):
 		"""
 		algorithm can be NSGAII, SPEA2
@@ -203,17 +336,20 @@ class EA:
 		#assign
 		self.toolbox = toolbox
 		self.experiment_name = experiment_name
+		self.algorithm = algorithm
 		self.selection_method = selection_method
+		self.evolution_strategy = evolution_strategy
+		self.input_variable_count = input_variable_count
 
 		#initialisation
 		self.total_generations = 0
 		self.population = []
 
 		#defaults
-		if algorithm == "NSGAII":
+		if self.algorithm == "NSGAII":
 			#self.evolution_strategy 
 			pass
-		elif algorithm == "SPEA2":
+		elif self.algorithm == "SPEA2":
 			#self.evolution_strategy 
 			pass
 
