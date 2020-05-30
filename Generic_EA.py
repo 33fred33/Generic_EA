@@ -14,6 +14,61 @@ import math
 from inspect import signature
 
 
+class Individual:
+	def __init__(
+		self, 
+		creation_generation = None,
+		parents_species = None,
+		genotype = None, 
+		phenotype = None,
+		fitness_value = None,
+		objective_values = None,             #used in MOEA
+		n_dominators = None,                 #used in MOEA, pareto dominance
+		n_dominated_solutions = None,        #used in MOEA, pareto dominance
+		dominated_solutions = None,          #used in NSGA-II
+		local_crowding_distance = None,      #used in NSGA-II
+		non_domination_rank = None,          #used in NSGA-II
+		comparison_operator = "fitness"):
+		"""
+		comparison_operator can be fitness, crowded_comparison_operator
+		"""
+
+		self.creation_generation = creation_generation,
+		self.parents_speceis = parents_speceis,
+		self.genotype = genotype
+		self.phenotype = phenotype
+		self.n_dominators = n_dominators
+		self.n_dominated_solutions = n_dominated_solutions
+		self.dominated_solutions = dominated_solutions
+		self.objective_values = objective_values
+		self.fitness_value = fitness_value
+		self.local_crowding_distance = local_crowding_distance
+		self.non_domination_rank = non_domination_rank
+		self.comparison_operator = comparison_operator
+
+	def __lt__(self, other): #less than
+
+		if comparison_operator == "fitness":
+			return self.fitness_value < other.fitness_value
+
+		elif comparison_operator == "crowded_comparison_operator": #used in NSGA-II
+			if self.non_domination_rank < other.non_domination_rank:
+				return True
+			elif self.non_domination_rank > other.non_domination_rank:
+				return False
+			else:
+				return self.local_crowding_distance > other.local_crowding_distance
+    
+	def __eq__(self, other):
+        
+		if comparison_operator == "fitness":
+			return self.fitness_value == other.fitness_value
+
+		elif comparison_operator == "crowded_comparison_operator": #used in NSGA-II
+			if self.non_domination_rank != other.non_domination_rank:
+				return False
+			else:
+				return self.local_crowding_distance == other.local_crowding_distance
 
 ################################################################################
 ###################################   GP   #####################################
@@ -25,45 +80,48 @@ class GP_Toolbox:
         terminals = ["constant", "input_index"], #if more are added, check terminals dependencies
         teminal_generation_method = "uniform",
         terminals_probabilities = (0.5, 0.5),
+        operators_probabilities = None,
+        operator_generation_method = "uniform",
         operations = ["add","sub","mul", "safe_divide_zero"],
-        input_variable_count = 1):
+        input_variable_count = 1,
+        random_constant_lower_limit = -1,
+        random_constant_upper_limit = 1):
 		"""
 		terminals options: random_constant, random_input_index
 		teminal_generation_method can be uniform, by_probability
+		operator_selection_method can be uniform, by_probability
 		terminals_probabilities is only used if teminal_generation_method is by_probability
 		it is a tuple of float numbers with length equal to terminals, total must equal 1
 		operations options: and, sub, mul, safe_divide_zero, safe_divide_numerator, signed_if, sin, cos, and, or, if, not
 		"""
 
-		self.terminals = []
-		for terminal in terminals:
-			if terminal == "random_constant":
-				self.terminals.append(self.get_random_constant)
-				self.random_constant_lower_limit = -1
-				self.random_constant_upper_limit = 1
-			if terminal == "random_input_index":
-				self.terminals.append(self.get_random_input_index)
+		self.terminals = terminals
+		self.random_constant_lower_limit = random_constant_lower_limit
+		self.random_constant_upper_limit = random_constant_upper_limit
 		self.teminal_generation_method = teminal_generation_method
 		self.terminals_probabilities = terminals_probabilities
-
-		self.functions = []
-		for operation in operations:
-			if operation == "add": operations.append(operator.add)
-			elif operation == "sub": operations.append(operator.sub)
-			elif operation == "mul": operations.append(operator.mul)
-			elif operation == "safe_divide_numerator": operations.append(self.safe_divide_numerator)
-			elif operation == "safe_divide_zero": operations.append(self.safe_divide_zero)
-			elif operation == "signed_if": operations.append(self.signed_if)
-			elif operation == "sin": operations.append(math.sin)
-			elif operation == "cos": operations.append(math.cos)
-			elif operation == "and": operations.append(operator.and_)
-			elif operation == "or": operations.append(operator.or_)
-			elif operation == "if": operations.append(self.boolean_if)
-			elif operation == "not": operations.append(operator.not_)
-
 		self.input_variable_count = input_variable_count
+		self.operators_probabilities = operators_probabilities
+        self.operator_generation_method = operator_generation_method
+
+		self.operations = []
+		for operation in operations:
+			if operation == "add": self.operations.append(operator.add)
+			elif operation == "sub": self.operations.append(operator.sub)
+			elif operation == "mul": self.operations.append(operator.mul)
+			elif operation == "safe_divide_numerator": self.operations.append(self.safe_divide_numerator)
+			elif operation == "safe_divide_zero": self.operations.append(self.safe_divide_zero)
+			elif operation == "signed_if": self.operations.append(self.signed_if)
+			elif operation == "sin": self.operations.append(math.sin)
+			elif operation == "cos": self.operations.append(math.cos)
+			elif operation == "and": self.operations.append(operator.and_)
+			elif operation == "or": self.operations.append(operator.or_)
+			elif operation == "if": self.operations.append(self.boolean_if)
+			elif operation == "not": self.operations.append(operator.not_)
+
 		
 	#construction methods
+
 	def generate_terminal(self, 
 			terminal_type = None, 
 			random_constant_lower_limit = None, 
@@ -77,43 +135,6 @@ class GP_Toolbox:
 		it is a tuple of float numbers with length equal to terminals, total must equal 1
 		returns content_type, content
 		"""
-		if terminal_type is None:
-			if terminal_generation_method == "uniform":
-				terminal_type = self.terminals
-			else:
-				assert len(self.terminals) > 1, "Wrong terminal generation options"
-				terminal_type = self.terminals[0]
-		if terminal_generation_method is None: terminal_generation_method = self.terminal_generation_method
-		if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
-
-
-		if terminal_generation_method == "uniform":
-			options = []
-			for t in terminal_type:
-				if t == "constant": options.append(t)
-				elif t == "input_index": options.extend([t for _ in range(self.input_variable_count)])
-			choice = rd.choice(options)
-
-		elif terminal_generation_method == "by_probability":
-			temporal = np.random.uniform()
-			index = 0
-			accumulative_probability = terminals_probabilities[index]
-			while temporal >= accumulative_probability:
-				index += 1
-				accumulative_probability += terminals_probabilities[index]
-			choice = terminal_type[index]
-
-
-		if choice == "constant":
-			if random_constant_lower_limit is None: random_constant_lower_limit = self.random_constant_lower_limit
-			if random_constant_upper_limit is None: random_constant_upper_limit = self.random_constant_upper_limit
-			return "constant", np.random.uniform(random_constant_lower_limit, random_constant_upper_limit)
-
-		elif choice == "input_index":
-			return "input_index", rd.randint(0, self.input_variable_count - 1)
-
-	def generate_operator(self):
-		return rd.choice(self.operations)
 
 	def get_arity(self, operator):
 		sig = signature(operator)
@@ -121,25 +142,65 @@ class GP_Toolbox:
 		return arity
 
 	def generate_individual(self, 
-		max_depth, 
-		method, 
-		parent = None, 
-		depth = 0):
+			max_depth, 
+			method, 
+			parent = None, 
+			depth = 0,
+			terminals = None,
+			teminal_generation_method = None,
+			terminals_probabilities = None,
+			operators_probabilities = None,
+			operator_generation_method = None,
+			operations = None,
+			input_variable_count = None,
+			random_constant_lower_limit = None,
+			random_constant_upper_limit = None
+			):
 		"""
 		method can be full or grow
 		"""
+		if terminals is None: terminals = self.terminals
+		if teminal_generation_method is None: teminal_generation_method = self.teminal_generation_method
+        if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
+        if operators_probabilities is None: operators_probabilities = self.operators_probabilities
+        if operator_generation_method is None: operator_generation_method = self.operator_generation_method
+        if operations is None: operations = self.operations
+        if input_variable_count is None: input_variable_count = self.input_variable_count
+        if random_constant_lower_limit is None: random_constant_lower_limit = self.random_constant_lower_limit
+        if random_constant_upper_limit is None: random_constant_upper_limit = self.random_constant_upper_limit
+
 		if depth == max_depth - 1:
-			content_type, content = self.generate_terminal()
-			return GP_Node(content, parent = parent, content_type = content_type)
+			return GP_Node(content_type_choices = terminals,
+							content_type_probabilities = terminals_probabilities,
+							content_type_generation_method = terminal_generation_method,
+							input_variable_count = input_variable_count,
+							random_constant_lower_limit = random_constant_lower_limit,
+							random_constant_upper_limit = random_constant_upper_limit,
+							parent = parent)
 		else:
 
 			if method == "full":
-				operator = self.generate_operator()
-				arity = get_arity(operator)
-				node = GP_Node(operator, parent = parent, content_type = "operator")
+				node = GP_Node(content_choices = self.operations,
+								conten_type = "operator",
+								content_generation_method = "random_uniform",
+								parent = parent)
+				arity = get_arity(node.content)
 				for _ in range(arity):
-					children = self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1)
-					node.children.append()
+					child = self.generate_individual(max_depth = max_depth, 
+														method = method, 
+														parent = node, 
+														depth = depth + 1,
+														terminals = terminals,
+														teminal_generation_method = teminal_generation_method,
+														terminals_probabilities = terminals_probabilities,
+														operators_probabilities = operators_probabilities,
+														operator_generation_method = operator_generation_method,
+														operations = operations,
+														input_variable_count = input_variable_count,
+														random_constant_lower_limit = random_constant_lower_limit,
+														random_constant_upper_limit = random_constant_upper_limit
+														):
+					node.children.append(child)
 				return node
 
 			if method == "grow":
@@ -219,19 +280,93 @@ class GP_Toolbox:
 
 
 class GP_Node:
-    def __init__(self, content, *children, parent = None, content_type = None):
-    	"""
-    	content_type can be constant, input_index, operation
-    	"""
-        self.content = content
-        self.content_type = content_type
-        self.parent = parent
-        self.children = []
-        for child in children:
-            self.children.append(child)
-    
-    def is_terminal(self):
-        return self.children == []
+	def __init__(self, 
+		content_type = None,
+		content = None,
+		content_type_generation_method = None,
+		content_generation_method = None,
+		content_type_choices = None,
+		content_choices = None,
+		content_type_probabilities = None,
+		content_probabilities = None,
+		random_constant_lower_limit = -1, 
+		random_constant_upper_limit = 1, 
+		input_variable_count = None,
+		parent = None):
+		"""
+		content_type can be [empty, "constant", "input_index", "operation"]
+		generation_method can be [empty, "random_uniform", "by_probability"]
+		"""
+
+		self.parent = parent
+		self.children = []
+
+		if content is None:
+
+			#set conten_type
+			if content_type_generation_method is None:
+				assert content_type is not None, "missing content_type"
+				self.content_type = content_type
+
+			elif content_type_generation_method == "by_probability":
+				assert content_type_choices is not None, "missing choices"
+				assert content_type_probabilities is not None, "missing probabilities"
+				self.content_type = np.random.choice(content_type_choices, p = content_type_probabilities)
+				
+			elif content_type_generation_method == "random_uniform":
+				assert content_type_choices is not None, "missing choices"
+				self.content_type = rd.choice(content_type_choices)
+
+
+			#set content
+			if self.content_type == "input_index":
+				assert input_variable_count is not None, "missing input_variable_count"
+
+				if content_choices is None:
+					content_choices = range(input_variable_count)
+
+				if content_generation_method is None or content_generation_method == "random_uniform":
+					self.content = rd.choice(content_choices)
+
+				elif content_generation_method == "by_probability":
+					assert content_probabilities is not None, "missing content_probabilities"
+					self.content = np.random.choice(content_choices, p = content_probabilities)
+
+				assert isinstance(self.content, int), "wrong input index"
+
+			elif self.content_type == "constant":
+
+				if content_generation_method is None or content_generation_method == "random_uniform":
+					self.content = np.random.uniform(random_constant_lower_limit, random_constant_upper_limit)
+			
+				if content_generation_method == "by_probability"
+					assert content_probabilities is not None, "missing content_probabilities"
+					assert content_choices is not None, "missing content_choices"
+					self.conten = np.random.choice(content_choices, p = content_probabilities)
+
+			elif self.content_type = "operator":
+				assert content_choices is not None, "missing content_choices"
+
+				if content_generation_method is None or content_generation_method == "random_uniform":
+					self.content = rd.choice(content_choices)
+
+				if content_generation_method == "by_probability":
+					self.content = np.random.choice(content_choices, p = content_type_probabilities)
+
+		else:
+			assert content_type is not None, "missing content_type"
+			self.content = content
+			self.content_type = content_type
+		
+		self.set_is_terminal()
+		
+
+    def set_is_terminal(self):
+    	if self.content_type == "operator":
+    		self.is_terminal = False
+    	else:
+    		self.is_terminal = True
+
     
     def is_root(self):
         return self.parent is None
@@ -344,6 +479,8 @@ class GA_Toolbox:
 ###################################   EA   #####################################
 ################################################################################
 
+
+
 class EA:
 	def __init__(
             self,
@@ -392,6 +529,7 @@ class EA:
 				self.get_offsprings()
 				
 			elif evolution_strategy == "1+l":
+				assert es_lambda is not None, "wrong evolution strategy's parameters"
 				pass
 				#self.evaluate_population()
 				#self.offsprings_generation()
@@ -407,19 +545,31 @@ class EA:
 		self.population = population
 		return population
 
-	def select_individual(self, 
+	def select_individuals(self, 
 			n, 
+			population = None,
 			selection_method = None, 
-			tournament_size = None):
+			tournament_size = None,
+			population_is_sorted = False):
 		"""
 		selection method can be tournament, best
 		"""
+		if population is None: population = self.population
 		if selection_method is None: selection_method = self.selection_method
-		if selection_method -- "tournament":
-			assert tournament_size is not None, "wrong tournament selection parameters"
+
+		selected_individuals = []
+		for individual_index in range(n):
+
+			if selection_method == "tournament":
+				assert tournament_size is not None, "wrong tournament selection parameters"
+				competitors = [rd.choice(population) for _ in range(tournament_size)]
+				if population_is_sorted:
+
+				selected_individual = max(competitors)
+
+		selected_individuals.append(selected_individual)
 
 		return selected_individuals
-
 
 	def store_population(self):
 		pass
@@ -427,26 +577,11 @@ class EA:
 	def load_population(self):
 		pass
 
-	def get_best(self,
-			n = 1, 
-			criteria = "fitness"):
-		pass
-
-	def select(self,
-			n = 1, 
-			population = None, 
-			method = None):
-		if method is None: method = self.selection_method
-		if population is None: population = self.population
-		
-		pass
-
-		#return selection
-
 	def fast_nondominated_sort(self,
 			population = None):
 		"""
 		Originaly from the NSGA-II algorithm.
+		Returns the population sorted
 		"""
 		if population is None: population = self.population
 
@@ -509,61 +644,6 @@ class EA:
 
 
 
-class Individual:
-	def __init__(
-		self, 
-		generation_of_creation = None,
-		parents_species = None,
-		genotype = None, 
-		phenotype = None,
-		fitness_value = None,
-		objective_values = None,             #used in MOEA
-		n_dominators = None,                 #used in MOEA, pareto dominance
-		n_dominated_solutions = None,        #used in MOEA, pareto dominance
-		dominated_solutions = None,          #used in NSGA-II
-		local_crowding_distance = None,      #used in NSGA-II
-		non_domination_rank = None,          #used in NSGA-II
-		comparison_operator = "fitness"):
-		"""
-		comparison_operator can be fitness, crowded_comparison_operator
-		"""
-
-		self.generation_of_creation = generation_of_creation,
-		self.parents_speceis = parents_speceis,
-		self.genotype = genotype
-		self.phenotype = phenotype
-		self.n_dominators = n_dominators
-		self.n_dominated_solutions = n_dominated_solutions
-		self.dominated_solutions = dominated_solutions
-		self.objective_values = objective_values
-		self.fitness_value = fitness_value
-		self.local_crowding_distance = local_crowding_distance
-		self.non_domination_rank = non_domination_rank
-		self.comparison_operator = comparison_operator
-
-	def __lt__(self, other): #less than
-
-		if comparison_operator == "fitness":
-			return self.fitness_value < other.fitness_value
-
-		elif comparison_operator == "crowded_comparison_operator": #used in NSGA-II
-			if self.non_domination_rank < other.non_domination_rank:
-				return True
-			elif self.non_domination_rank > other.non_domination_rank:
-				return False
-			else:
-				return self.local_crowding_distance > other.local_crowding_distance
-    
-	def __eq__(self, other):
-        
-		if comparison_operator == "fitness":
-			return self.fitness_value == other.fitness_value
-
-		elif comparison_operator == "crowded_comparison_operator": #used in NSGA-II
-			if self.non_domination_rank != other.non_domination_rank:
-				return False
-			else:
-				return self.local_crowding_distance == other.local_crowding_distance
 
 
 
