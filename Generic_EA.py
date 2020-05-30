@@ -81,10 +81,11 @@ class GP_Toolbox:
 			if terminal_generation_method == "uniform":
 				terminal_type = self.terminals
 			else:
-				assert len(self.terminals) > 1, "Wrong terminal generation path"
+				assert len(self.terminals) > 1, "Wrong terminal generation options"
 				terminal_type = self.terminals[0]
 		if terminal_generation_method is None: terminal_generation_method = self.terminal_generation_method
 		if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
+
 
 		if terminal_generation_method == "uniform":
 			options = []
@@ -111,29 +112,6 @@ class GP_Toolbox:
 		elif choice == "input_index":
 			return "input_index", rd.randint(0, self.input_variable_count - 1)
 
-	def generate_automatic_terminal(self, terminals = None, teminal_generation_method = None, terminals_probabilities = None):
-
-		else:
-			if teminal_generation_method == "uniform":
-				if terminals == ["random_constant", "random_input_index"]: #terminals dependent
-					temporal = rd.randint(0, input_variable_count)
-					if temporal == input_variable_count:
-						content_type, content = self.generate_terminal(terminal_type = "random_constant")
-						return content_type, content 
-					else:
-						content_type, content = self.generate_terminal(terminal_type = "random_input_index")
-						return content_type, content
-
-			if teminal_generation_method == "by_probability":
-				temporal = np.random.uniform()
-				index = 0
-				accumulative_probability = terminals_probabilities[index]
-				while temporal >= accumulative_probability:
-					index += 1
-					accumulative_probability += terminals_probabilities[index]
-				content_type, content = self.generate_terminal(terminal_type = terminals[index])
-				return content_type, content
-
 	def generate_operator(self):
 		return rd.choice(self.operations)
 
@@ -142,12 +120,16 @@ class GP_Toolbox:
         arity = len(sig.parameters)
 		return arity
 
-	def generate_individual(self, max_depth, method, parent = None, depth = 0):
+	def generate_individual(self, 
+		max_depth, 
+		method, 
+		parent = None, 
+		depth = 0):
 		"""
 		method can be full or grow
 		"""
 		if depth == max_depth - 1:
-			content_type, content = self.generate_automatic_terminal()
+			content_type, content = self.generate_terminal()
 			return GP_Node(content, parent = parent, content_type = content_type)
 		else:
 
@@ -156,7 +138,8 @@ class GP_Toolbox:
 				arity = get_arity(operator)
 				node = GP_Node(operator, parent = parent, content_type = "operator")
 				for _ in range(arity):
-					node.children.append(self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1))
+					children = self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1)
+					node.children.append()
 				return node
 
 			if method == "grow":
@@ -168,26 +151,38 @@ class GP_Toolbox:
 						node.children.append(self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1))
 					return node
 				else:
-					content_type, content = self.generate_automatic_terminal()
+					content_type, content = self.generate_terminal()
 					return GP_Node(content, parent = parent, content_type = content_type)
 
 		assert True, "Wrong method to generate individual"
 
+	def generate_initial_population(self,
+		n,
+		method):
+
+
+
 	#evaluations
-	def evaluate(self, node, data):
+	def evaluate(self, 
+			node, 
+			data):
 		"""
 		evaluates the tree with the given data
 		"""
-        if not node.is_terminal():
-        	assert node.content_type == "function", "Non-terminal node has non-operation content!"
+        if node.is_terminal():
+        	if node.content == "data_index"
+           		return data[node.content]
+        	else:
+          	  return node.content
+   
+        else:
+        	assert node.content_type == "operator", "Non-terminal node has non-operation content!"
             arguments = [self.evaluate(child, data) for child in node.children]
             return node.content(*arguments)
-        elif node.content == "data_index"
-            return data[node.content]
-        else:
-            return node.content
-
-    def mutate(self, type = "subtree"):
+        	
+    #transformation
+    def mutate(self, 
+    		type = "subtree"):
     	"""
     	type can be subtree, single_node
     	"""
@@ -197,31 +192,30 @@ class GP_Toolbox:
 
 
 	#Operations
-	def safe_divide_numerator(a, b):
+	def safe_divide_numerator(self, a, b):
 	    """
 	    Executes a/b. If b=0, returns a
 	    """
 	    if b == 0 : return a
 	    else: return a/b
 
-	def safe_divide_zero(a, b):
+	def safe_divide_zero(self, a, b):
 	    """
 	    Executes a/b. If b=0, returns 0
 	    """
 	    if b == 0 : return 0
 	    else: return a/b
 
-	def signed_if(condition, a, b):
+	def signed_if(self, condition, a, b):
 	    """
 	    Returns a if condition is <= 0, b otherwise
 	    """
 	    if condition <= 0 : return a
 	    else: return b
 
-	def boolean_if(condition, a, b):
+	def boolean_if(self, condition, a, b):
 	    if condition: return a
-	    else: return b
-
+	    else: return b		
 
 
 class GP_Node:
@@ -282,7 +276,10 @@ class GP_Node:
 
     def __eq__(self, other):
         if self.is_terminal and other.is_terminal:
-            return self.content == other.content
+        	if content_type == content_type:
+            	return self.content == other.content
+            else:
+            	return False
         else:
             children_length = len(self.children)
             if children_length != len(other.children):
@@ -309,10 +306,38 @@ class GP_Node:
 
 
 ################################################################################
-###################################   CGP   #####################################
+###################################   CGP   ####################################
 ################################################################################
 
 
+
+################################################################################
+###################################   GA   #####################################
+################################################################################
+
+
+class GA_Toolbox:
+	def __init__(
+        self,
+        genes = [0,1],
+        initialisation_method = "uniform"
+        ):
+		"""
+		
+		"""
+		self.genes = genes
+		self.initialisation_method = initialisation_method
+
+
+	def get_initial_population(self, 
+			n = 100, 
+			initialisation_method = None
+			):
+		if initialisation_method is None: initialisation_method = self.initialisation_method
+		population = [self.generate_individual(initialisation_method) for _ in range(n)]
+		return population
+
+	def generate_individual(self):
 
 
 ################################################################################
@@ -322,12 +347,13 @@ class GP_Node:
 class EA:
 	def __init__(
             self,
-            toolbox = GP_Toolbox(),
+            toolbox,
             experiment_name = None,
             algorithm = None,
             selection_method = "tournament",
             evolution_strategy = "1+1",
-            input_variable_count = 1
+            input_variable_count = 1,
+            initialisation_method = None
             ):
 		"""
 		algorithm can be NSGAII, SPEA2
@@ -353,15 +379,18 @@ class EA:
 			#self.evolution_strategy 
 			pass
 
-	def run_generations(n = 1, evolution_strategy = None, es_lambda = None):
+	def run_generations(
+			n = 1, 
+			evolution_strategy = None, 
+			es_lambda = None):
 		if evolution_strategy is None: evolution_strategy = self.evolution_strategy
 		if es_lambda is None: es_lambda = self.es_lambda
 
 		for generation in range(n):
 			if evolution_strategy == "1+1":
-				pass
-				#self.offsprings_generation()
-				#self.evaluate_population()
+				self.evaluate_population()
+				self.get_offsprings()
+				
 			elif evolution_strategy == "1+l":
 				pass
 				#self.evaluate_population()
@@ -370,23 +399,43 @@ class EA:
 			self.store_population()
 			self.total_generations += 1
 
-	def initialise_population(n = 100, method = "random"):
+	def get_initial_population(self,
+			n, 
+			method
+			):
+		population = toolbox.generate_initial_population(n, method)
+		self.population = population
+		return population
+
+	def select_individual(self, 
+			n, 
+			selection_method = None, 
+			tournament_size = None):
+		"""
+		selection method can be tournament, best
+		"""
+		if selection_method is None: selection_method = self.selection_method
+		if selection_method -- "tournament":
+			assert tournament_size is not None, "wrong tournament selection parameters"
+
+		return selected_individuals
+
+
+	def store_population(self):
 		pass
-		#toolbox.initialise_population(n)
 
-	def select_individual(self, n = 1, selection_method = None, tournament_size = 3):
-		if selection_method is None: selection_method = self.selection_method 
-
-	def store_population():
+	def load_population(self):
 		pass
 
-	def load_population():
+	def get_best(self,
+			n = 1, 
+			criteria = "fitness"):
 		pass
 
-	def get_best(n = 1, criteria = "fitness"):
-		pass
-
-	def select(n = 1, population = None, method = None):
+	def select(self,
+			n = 1, 
+			population = None, 
+			method = None):
 		if method is None: method = self.selection_method
 		if population is None: population = self.population
 		
@@ -394,7 +443,8 @@ class EA:
 
 		#return selection
 
-	def fast_nondominated_sort(population = None):
+	def fast_nondominated_sort(self,
+			population = None):
 		"""
 		Originaly from the NSGA-II algorithm.
 		"""
@@ -425,7 +475,8 @@ class EA:
 
 		return sorted(population)
 
-	def set_local_crowding_distances(population = None):
+	def set_local_crowding_distances(self,
+			population = None):
 		"""
 		Originaly from the NSGA-II algorithm.
 		"""
@@ -441,7 +492,9 @@ class EA:
 				individual.local_crowding_distance += (sorted_population[individual_index + 1] - sorted_population[individual_index - 1]) 
 
 
-	def dominates(individual1, individual2):
+	def dominates(self,
+			individual1, 
+			individual2):
 		"""
 		Boolean, pareto dominance. Individual 1 dominates individual 2?
 		"""
