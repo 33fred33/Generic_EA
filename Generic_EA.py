@@ -76,21 +76,22 @@ class Individual:
 
 class GP_Toolbox:
 	def __init__(
-        self,
-        terminals = ["constant", "input_index"], #if more are added, check terminals dependencies
-        teminal_generation_method = "uniform",
-        terminals_probabilities = (0.5, 0.5),
-        operators_probabilities = None,
-        operator_generation_method = "uniform",
-        operations = ["add","sub","mul", "safe_divide_zero"],
-        input_variable_count = 1,
-        random_constant_lower_limit = -1,
-        random_constant_upper_limit = 1):
+			self,
+			terminals = ["constant", "input_index"], #if more are added, check terminals dependencies
+			terminal_generation_method = "random_uniform",
+			terminals_probabilities = (0.5, 0.5),
+			operators_probabilities = None,
+			operator_generation_method = "random_uniform",
+			operations = ["add","sub","mul", "safe_divide_zero"],
+			input_variable_count = 1,
+			random_constant_lower_limit = -1,
+			random_constant_upper_limit = 1,
+			initialisation_method = "full"):
 		"""
 		terminals options: random_constant, random_input_index
-		teminal_generation_method can be uniform, by_probability
+		terminal_generation_method can be uniform, by_probability
 		operator_selection_method can be uniform, by_probability
-		terminals_probabilities is only used if teminal_generation_method is by_probability
+		terminals_probabilities is only used if terminal_generation_method is by_probability
 		it is a tuple of float numbers with length equal to terminals, total must equal 1
 		operations options: and, sub, mul, safe_divide_zero, safe_divide_numerator, signed_if, sin, cos, and, or, if, not
 		"""
@@ -98,11 +99,12 @@ class GP_Toolbox:
 		self.terminals = terminals
 		self.random_constant_lower_limit = random_constant_lower_limit
 		self.random_constant_upper_limit = random_constant_upper_limit
-		self.teminal_generation_method = teminal_generation_method
+		self.terminal_generation_method = terminal_generation_method
 		self.terminals_probabilities = terminals_probabilities
 		self.input_variable_count = input_variable_count
 		self.operators_probabilities = operators_probabilities
-        self.operator_generation_method = operator_generation_method
+		self.operator_generation_method = operator_generation_method
+		self.initialisation_method = initialisation_method
 
 		self.operations = []
 		for operation in operations:
@@ -138,7 +140,7 @@ class GP_Toolbox:
 
 	def get_arity(self, operator):
 		sig = signature(operator)
-        arity = len(sig.parameters)
+		arity = len(sig.parameters)
 		return arity
 
 	def generate_individual(self, 
@@ -147,7 +149,7 @@ class GP_Toolbox:
 			parent = None, 
 			depth = 0,
 			terminals = None,
-			teminal_generation_method = None,
+			terminal_generation_method = None,
 			terminals_probabilities = None,
 			operators_probabilities = None,
 			operator_generation_method = None,
@@ -160,14 +162,14 @@ class GP_Toolbox:
 		method can be full or grow
 		"""
 		if terminals is None: terminals = self.terminals
-		if teminal_generation_method is None: teminal_generation_method = self.teminal_generation_method
-        if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
-        if operators_probabilities is None: operators_probabilities = self.operators_probabilities
-        if operator_generation_method is None: operator_generation_method = self.operator_generation_method
-        if operations is None: operations = self.operations
-        if input_variable_count is None: input_variable_count = self.input_variable_count
-        if random_constant_lower_limit is None: random_constant_lower_limit = self.random_constant_lower_limit
-        if random_constant_upper_limit is None: random_constant_upper_limit = self.random_constant_upper_limit
+		if terminal_generation_method is None: terminal_generation_method = self.terminal_generation_method
+		if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
+		if operators_probabilities is None: operators_probabilities = self.operators_probabilities
+		if operator_generation_method is None: operator_generation_method = self.operator_generation_method
+		if operations is None: operations = self.operations
+		if input_variable_count is None: input_variable_count = self.input_variable_count
+		if random_constant_lower_limit is None: random_constant_lower_limit = self.random_constant_lower_limit
+		if random_constant_upper_limit is None: random_constant_upper_limit = self.random_constant_upper_limit
 
 		if depth == max_depth - 1:
 			return GP_Node(content_type_choices = terminals,
@@ -181,17 +183,17 @@ class GP_Toolbox:
 
 			if method == "full":
 				node = GP_Node(content_choices = self.operations,
-								conten_type = "operator",
+								content_type = "operator",
 								content_generation_method = "random_uniform",
 								parent = parent)
-				arity = get_arity(node.content)
+				arity = self.get_arity(node.content)
 				for _ in range(arity):
 					child = self.generate_individual(max_depth = max_depth, 
 														method = method, 
 														parent = node, 
 														depth = depth + 1,
 														terminals = terminals,
-														teminal_generation_method = teminal_generation_method,
+														terminal_generation_method = terminal_generation_method,
 														terminals_probabilities = terminals_probabilities,
 														operators_probabilities = operators_probabilities,
 														operator_generation_method = operator_generation_method,
@@ -199,27 +201,84 @@ class GP_Toolbox:
 														input_variable_count = input_variable_count,
 														random_constant_lower_limit = random_constant_lower_limit,
 														random_constant_upper_limit = random_constant_upper_limit
-														):
+														)
 					node.children.append(child)
 				return node
 
 			if method == "grow":
 				if rd.choice([True, False]) or depth == 0:
-					operator = self.generate_operator()
-					arity = get_arity(operator)
-					node = GP_Node(operator, parent = parent, content_type = "operator")
+					node = GP_Node(content_choices = self.operations,
+								content_type = "operator",
+								content_generation_method = "random_uniform",
+								parent = parent)
+					arity = self.get_arity(node.content)
 					for _ in range(arity):
-						node.children.append(self.generate_individual(max_depth, method = "full", parent = node, depth = depth + 1))
+						child = self.generate_individual(max_depth = max_depth, 
+															method = method, 
+															parent = node, 
+															depth = depth + 1,
+															terminals = terminals,
+															terminal_generation_method = terminal_generation_method,
+															terminals_probabilities = terminals_probabilities,
+															operators_probabilities = operators_probabilities,
+															operator_generation_method = operator_generation_method,
+															operations = operations,
+															input_variable_count = input_variable_count,
+															random_constant_lower_limit = random_constant_lower_limit,
+															random_constant_upper_limit = random_constant_upper_limit
+															)
+						node.children.append(child)
 					return node
+
 				else:
-					content_type, content = self.generate_terminal()
-					return GP_Node(content, parent = parent, content_type = content_type)
+					return GP_Node(content_type_choices = terminals,
+							content_type_probabilities = terminals_probabilities,
+							content_type_generation_method = terminal_generation_method,
+							input_variable_count = input_variable_count,
+							random_constant_lower_limit = random_constant_lower_limit,
+							random_constant_upper_limit = random_constant_upper_limit,
+							parent = parent)
 
 		assert True, "Wrong method to generate individual"
 
+
 	def generate_initial_population(self,
-		n,
-		method):
+			n,
+			max_depth, 
+			initialisation_method = None, 
+			parent = None, 
+			depth = 0,
+			terminals = None,
+			terminal_generation_method = None,
+			terminals_probabilities = None,
+			operators_probabilities = None,
+			operator_generation_method = None,
+			operations = None,
+			input_variable_count = None,
+			random_constant_lower_limit = None,
+			random_constant_upper_limit = None
+			):
+
+		if initialisation_method is None: initialisation_method = self.initialisation_method
+		population = []
+
+		if initialisation_method == "full":
+			for i in range(n):
+				individual = self.generate_individual(max_depth = max_depth, 
+													method = initialisation_method,
+													terminals = terminals,
+													terminal_generation_method = terminal_generation_method,
+													terminals_probabilities = terminals_probabilities,
+													operators_probabilities = operators_probabilities,
+													operator_generation_method = operator_generation_method,
+													operations = operations,
+													input_variable_count = input_variable_count,
+													random_constant_lower_limit = random_constant_lower_limit,
+													random_constant_upper_limit = random_constant_upper_limit)
+
+				population.append(individual)
+		
+		return population
 
 
 
@@ -230,53 +289,53 @@ class GP_Toolbox:
 		"""
 		evaluates the tree with the given data
 		"""
-        if node.is_terminal():
-        	if node.content == "data_index"
-           		return data[node.content]
-        	else:
-          	  return node.content
-   
-        else:
-        	assert node.content_type == "operator", "Non-terminal node has non-operation content!"
-            arguments = [self.evaluate(child, data) for child in node.children]
-            return node.content(*arguments)
-        	
-    #transformation
-    def mutate(self, 
-    		type = "subtree"):
-    	"""
-    	type can be subtree, single_node
-    	"""
-    	new_individual = parent.copy()
-    	if type == "subtree":
-    		pass
+		if node.is_terminal:
+			if node.content == "input_index":
+				return data[node.content]
+			else:
+				return node.content
+
+		else:
+			assert node.content_type == "operator", "Non-terminal node has non-operation content!"
+			arguments = [self.evaluate(child, data) for child in node.children]
+			return node.content(*arguments)
+
+	#transformation
+	def mutate(self, 
+			type = "subtree"):
+		"""
+		type can be subtree, single_node
+		"""
+		new_individual = parent.copy()
+		if type == "subtree":
+			pass
 
 
 	#Operations
 	def safe_divide_numerator(self, a, b):
-	    """
-	    Executes a/b. If b=0, returns a
-	    """
-	    if b == 0 : return a
-	    else: return a/b
+		"""
+		Executes a/b. If b=0, returns a
+		"""
+		if b == 0 : return a
+		else: return a/b
 
 	def safe_divide_zero(self, a, b):
-	    """
-	    Executes a/b. If b=0, returns 0
-	    """
-	    if b == 0 : return 0
-	    else: return a/b
+		"""
+		Executes a/b. If b=0, returns 0
+		"""
+		if b == 0 : return 0
+		else: return a/b
 
 	def signed_if(self, condition, a, b):
-	    """
-	    Returns a if condition is <= 0, b otherwise
-	    """
-	    if condition <= 0 : return a
-	    else: return b
+		"""
+		Returns a if condition is <= 0, b otherwise
+		"""
+		if condition <= 0 : return a
+		else: return b
 
 	def boolean_if(self, condition, a, b):
-	    if condition: return a
-	    else: return b		
+		if condition: return a
+		else: return b		
 
 
 class GP_Node:
@@ -302,8 +361,13 @@ class GP_Node:
 		self.children = []
 
 		if content is None:
+			#print("\ncontent_type", content_type)
+			#print("content_type_generation_method", content_type_generation_method)
+			#print("content_type_choices", content_type_choices)
 
-			#set conten_type
+			assert content_type in [None, "by_probability", "random_uniform", "operator"], "Wrong content_type"
+
+			#set content_type
 			if content_type_generation_method is None:
 				assert content_type is not None, "missing content_type"
 				self.content_type = content_type
@@ -316,6 +380,8 @@ class GP_Node:
 			elif content_type_generation_method == "random_uniform":
 				assert content_type_choices is not None, "missing choices"
 				self.content_type = rd.choice(content_type_choices)
+
+			#elif 
 
 
 			#set content
@@ -339,12 +405,12 @@ class GP_Node:
 				if content_generation_method is None or content_generation_method == "random_uniform":
 					self.content = np.random.uniform(random_constant_lower_limit, random_constant_upper_limit)
 			
-				if content_generation_method == "by_probability"
+				if content_generation_method == "by_probability":
 					assert content_probabilities is not None, "missing content_probabilities"
 					assert content_choices is not None, "missing content_choices"
 					self.conten = np.random.choice(content_choices, p = content_probabilities)
 
-			elif self.content_type = "operator":
+			elif self.content_type == "operator":
 				assert content_choices is not None, "missing content_choices"
 
 				if content_generation_method is None or content_generation_method == "random_uniform":
@@ -359,84 +425,84 @@ class GP_Node:
 			self.content_type = content_type
 		
 		self.set_is_terminal()
-		
 
-    def set_is_terminal(self):
-    	if self.content_type == "operator":
-    		self.is_terminal = False
-    	else:
-    		self.is_terminal = True
 
-    
-    def is_root(self):
-        return self.parent is None
+	def set_is_terminal(self):
+		if self.content_type == "operator":
+			self.is_terminal = False
+		else:
+			self.is_terminal = True
 
-    def get_subtree_nodes(self):
-        """
-        Returns a list with all the nodes of the subtree with this node as the root node, including himself
-        """
-        nodes = [self]
-        i = 0
-        while i < len(nodes):
-            if not nodes[i].is_terminal():
-                nodes.extend(nodes[i].children)
-            i += 1
-        return nodes
 
-    def get_nodes_count(self):
-        """
-        Returns the number of nodes in this tree (including this node as the root) as an int
-        """
-        return len(self.subtree_nodes())
+	def is_root(self):
+		return self.parent is None
 
-    def get_max_depth(self, depth = 0):
-        """
-        Returns the max depth of this tree as an int
-        """
-        new_depth = depth + 1
-        if self.is_terminal():
-            return new_depth
-        else:
-            return max([child.my_depth(new_depth) for child in self.children])
-    
-    def copy(self, parent=None):
-        """
-        Don't give arguments. Returns an unrelated new item with the same characteristics
-        """       
-        the_copy = GP_Node(self.content, parent = parent)
-        if not self.is_terminal():
-            for child in self.children:
-               the_copy.children.append(child.copy(parent = the_copy))
-        return the_copy
+	def get_subtree_nodes(self):
+		"""
+		Returns a list with all the nodes of the subtree with this node as the root node, including himself
+		"""
+		nodes = [self]
+		i = 0
+		while i < len(nodes):
+			if not nodes[i].is_terminal:
+				nodes.extend(nodes[i].children)
+			i += 1
+		return nodes
 
-    def __eq__(self, other):
-        if self.is_terminal and other.is_terminal:
-        	if content_type == content_type:
-            	return self.content == other.content
-            else:
-            	return False
-        else:
-            children_length = len(self.children)
-            if children_length != len(other.children):
-                return False
-            else:
-                for i in range(children_length):
-                    if not self.__eq__(self.children[i], other.children[i]):
-                        return False
-                return True
+	def get_nodes_count(self):
+		"""
+		Returns the number of nodes in this tree (including this node as the root) as an int
+		"""
+		return len(self.subtree_nodes())
 
-    def __str__(self):
-        if self.is_terminal():
-            if isinstance(self.content, int):
-                return "x" + str(self.content)
-            else:
-                return str(self.content)
-        else:
-            name_string = "(" + self.content.__name__
-            for child in self.children:
-                name_string += " " + str(child)
-            name_string += ")"
-            return name_string
+	def get_max_depth(self, depth = 0):
+		"""
+		Returns the max depth of this tree as an int
+		"""
+		new_depth = depth + 1
+		if self.is_terminal:
+			return new_depth
+		else:
+			return max([child.my_depth(new_depth) for child in self.children])
+
+	def copy(self, parent=None):
+		"""
+		Don't give arguments. Returns an unrelated new item with the same characteristics
+		"""
+		the_copy = GP_Node(self.content, parent = parent)
+		if not self.is_terminal:
+			for child in self.children:
+				the_copy.children.append(child.copy(parent = the_copy))
+		return the_copy
+
+	def __eq__(self, other):
+		if self.is_terminal and other.is_terminal:
+			if content_type == content_type:
+				return self.content == other.content
+			else:
+				return False
+		else:
+			children_length = len(self.children)
+			if children_length != len(other.children):
+				return False
+			else:
+				for i in range(children_length):
+					if not self.__eq__(self.children[i], other.children[i]):
+						return False
+				return True
+
+	def __str__(self):
+		if self.is_terminal:
+			if isinstance(self.content, int):
+				return "x" + str(self.content)
+			else:
+				return str(self.content)
+		else:
+			name_string = "(" + self.content.__name__
+			for child in self.children:
+				name_string += " " + str(child)
+			name_string += ")"
+			return name_string
 
 
 
@@ -453,10 +519,10 @@ class GP_Node:
 
 class GA_Toolbox:
 	def __init__(
-        self,
-        genes = [0,1],
-        initialisation_method = "uniform"
-        ):
+		self,
+		genes = [0,1],
+		initialisation_method = "uniform"
+		):
 		"""
 		
 		"""
@@ -473,6 +539,7 @@ class GA_Toolbox:
 		return population
 
 	def generate_individual(self):
+		pass
 
 
 ################################################################################
@@ -483,15 +550,14 @@ class GA_Toolbox:
 
 class EA:
 	def __init__(
-            self,
-            toolbox,
-            experiment_name = None,
-            algorithm = None,
-            selection_method = "tournament",
-            evolution_strategy = "1+1",
-            input_variable_count = 1,
-            initialisation_method = None
-            ):
+			self,
+			toolbox,
+			experiment_name = None,
+			algorithm = None,
+			selection_method = "tournament",
+			evolution_strategy = "1+1",
+			initialisation_method = None
+			):
 		"""
 		algorithm can be NSGAII, SPEA2
 		selection method can be tournament, random_uniform
@@ -502,7 +568,6 @@ class EA:
 		self.algorithm = algorithm
 		self.selection_method = selection_method
 		self.evolution_strategy = evolution_strategy
-		self.input_variable_count = input_variable_count
 
 		#initialisation
 		self.total_generations = 0
@@ -563,7 +628,6 @@ class EA:
 			if selection_method == "tournament":
 				assert tournament_size is not None, "wrong tournament selection parameters"
 				competitors = [rd.choice(population) for _ in range(tournament_size)]
-				if population_is_sorted:
 
 				selected_individual = max(competitors)
 
