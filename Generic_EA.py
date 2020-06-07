@@ -79,7 +79,7 @@ class GP_Toolbox:
 			self,
 			terminals = ["constant", "input_index"], #if more are added, check terminals dependencies
 			terminal_generation_method = "random_uniform",
-			terminals_probabilities = (0.5, 0.5),
+			terminals_probabilities = None,
 			operators_probabilities = None,
 			operator_generation_method = "random_uniform",
 			operations = ["add","sub","mul", "safe_divide_zero"],
@@ -88,22 +88,32 @@ class GP_Toolbox:
 			random_constant_upper_limit = 1,
 			initialisation_method = "full"):
 		"""
-		terminals options: random_constant, random_input_index
-		terminal_generation_method can be uniform, by_probability
-		operator_selection_method can be uniform, by_probability
-		terminals_probabilities is only used if terminal_generation_method is by_probability
-		it is a tuple of float numbers with length equal to terminals, total must equal 1
-		operations options: and, sub, mul, safe_divide_zero, safe_divide_numerator, signed_if, sin, cos, and, or, if, not
+		Genetic Programming object to handle tree functions
+
+		:param terminals: list of strings, can contain any between ["constant", "input_index"]
+		:param terminal_generation_method: string with options ["uniform", "by_probability"]
+		:param terminals_probabilities: tuple of floats with length equal to :param terminals: and total 1. 
+			Only used if terminal_generation_method is "by_probability"
+		:param operators_probabilities: tuple of floats with length equal to :param operators: and total 1. 
+			Only used if operator_generation_method is "by_probability"
+		:param operator_generation_method: string with options ["uniform", "by_probability"]
+		:param operations: list of strings, can contain any between 
+			["and", "sub", "mul", "safe_divide_zero", "safe_divide_numerator", "signed_if", "sin", "cos", "and", "or", "if", "not"]
+		:param input_variable_count: int specifying the number of attributes of the dataset
+		:param random_constant_lower_limit: int used as lower limit in the generation of random uniform terminals
+		:param random_constant_upper_limit: int used as upper limit in the generation of random uniform terminals
+		:param initialisation_method: string with options ["ramped_half_half", "full", "grow"]
+			It is the method to be used to generate the initial population
 		"""
 
 		self.terminals = terminals
-		self.random_constant_lower_limit = random_constant_lower_limit
-		self.random_constant_upper_limit = random_constant_upper_limit
 		self.terminal_generation_method = terminal_generation_method
 		self.terminals_probabilities = terminals_probabilities
-		self.input_variable_count = input_variable_count
 		self.operators_probabilities = operators_probabilities
 		self.operator_generation_method = operator_generation_method
+		self.input_variable_count = input_variable_count
+		self.random_constant_lower_limit = random_constant_lower_limit
+		self.random_constant_upper_limit = random_constant_upper_limit
 		self.initialisation_method = initialisation_method
 
 		self.operations = []
@@ -122,26 +132,19 @@ class GP_Toolbox:
 			elif operation == "not": self.operations.append(operator.not_)
 
 		
-	#construction methods
-
-	def generate_terminal(self, 
-			terminal_type = None, 
-			random_constant_lower_limit = None, 
-			random_constant_upper_limit = None, 
-			terminal_generation_method = None, 
-			terminals_probabilities = None):
-		"""
-		terminal_type options: constant, input_index. Can be one or more depending on the generation method
-		terminal_generation_method can be uniform, by_probability
-		terminals_probabilities is only used if terminal_generation_method is by_probability
-		it is a tuple of float numbers with length equal to terminals, total must equal 1
-		returns content_type, content
-		"""
+	#tool functions
 
 	def get_arity(self, operator):
+		"""
+		Returns the arity of the method, operator or funtion as an int
+
+		:param operator: is a method, operator or funtion
+		"""
 		sig = signature(operator)
 		arity = len(sig.parameters)
 		return arity
+
+	#construction methods
 
 	def generate_individual(self, 
 			max_depth, 
@@ -159,8 +162,27 @@ class GP_Toolbox:
 			random_constant_upper_limit = None
 			):
 		"""
-		method can be full or grow
+		Recursive method. Generates a tree function.
+		Returns the root node as a GP_Node class instance.
+
+		:param max_depth: int specifying the maximum depth allowed for the tree function
+		:param method: string with options ["full", "grow"]
+		:param parent: object to refer as the parent of the actual node in the tree
+		:param depth: int specifying the actual depth in the tree. The root has depth = 0
+		:param terminals: list of strings, can contain any between ["constant", "input_index"]
+		:param terminal_generation_method: string with options ["uniform", "by_probability"]
+		:param terminals_probabilities: tuple of floats with length equal to :param terminals: and total 1. 
+			Only used if terminal_generation_method is "by_probability"
+		:param operators_probabilities: tuple of floats with length equal to :param operators: and total 1. 
+			Only used if operator_generation_method is "by_probability"
+		:param operator_generation_method: string with options ["uniform", "by_probability"]
+		:param operations: list of strings, can contain any between 
+			["and", "sub", "mul", "safe_divide_zero", "safe_divide_numerator", "signed_if", "sin", "cos", "and", "or", "if", "not"]
+		:param input_variable_count: int specifying the number of attributes of the dataset
+		:param random_constant_lower_limit: int used as lower limit in the generation of random uniform terminals
+		:param random_constant_upper_limit: int used as upper limit in the generation of random uniform terminals
 		"""
+
 		if terminals is None: terminals = self.terminals
 		if terminal_generation_method is None: terminal_generation_method = self.terminal_generation_method
 		if terminals_probabilities is None: terminals_probabilities = self.terminals_probabilities
@@ -242,12 +264,12 @@ class GP_Toolbox:
 		assert True, "Wrong method to generate individual"
 
 
+
+
 	def generate_initial_population(self,
 			n,
 			max_depth, 
 			initialisation_method = None, 
-			parent = None, 
-			depth = 0,
 			terminals = None,
 			terminal_generation_method = None,
 			terminals_probabilities = None,
@@ -258,6 +280,27 @@ class GP_Toolbox:
 			random_constant_lower_limit = None,
 			random_constant_upper_limit = None
 			):
+
+		"""
+		Generates a population of tree functions.
+		Returns a list of the root nodes as GP_Node class instances of each tree function.
+
+		:param n: int specifying the number of tree functions to generate
+		:param max_depth: int specifying the maximum depth allowed for the tree function
+		:param initialisation_method: string with options ["ramped_hald_half","full", "grow"]
+		:param terminals: list of strings, can contain any between ["constant", "input_index"]
+		:param terminal_generation_method: string with options ["uniform", "by_probability"]
+		:param terminals_probabilities: tuple of floats with length equal to :param terminals: and total 1. 
+			Only used if terminal_generation_method is "by_probability"
+		:param operators_probabilities: tuple of floats with length equal to :param operators: and total 1. 
+			Only used if operator_generation_method is "by_probability"
+		:param operator_generation_method: string with options ["uniform", "by_probability"]
+		:param operations: list of strings, can contain any between 
+			["and", "sub", "mul", "safe_divide_zero", "safe_divide_numerator", "signed_if", "sin", "cos", "and", "or", "if", "not"]
+		:param input_variable_count: int specifying the number of attributes of the dataset
+		:param random_constant_lower_limit: int used as lower limit in the generation of random uniform terminals
+		:param random_constant_upper_limit: int used as upper limit in the generation of random uniform terminals
+		"""
 
 		if initialisation_method is None: initialisation_method = self.initialisation_method
 		population = []
@@ -287,14 +330,17 @@ class GP_Toolbox:
 			node, 
 			data):
 		"""
-		evaluates the tree with the given data
+		Recursive method. Evaluates the tree function with the given data
+		Returns the output of the tree function as a float
+
+		:param node: Root node of the tree function
+		:param data: List of numerical values. Represents a single data point from the data set
 		"""
 		if node.is_terminal:
 			if node.content == "input_index":
 				return data[node.content]
 			else:
 				return node.content
-
 		else:
 			assert node.content_type == "operator", "Non-terminal node has non-operation content!"
 			arguments = [self.evaluate(child, data) for child in node.children]
@@ -365,7 +411,7 @@ class GP_Node:
 			#print("content_type_generation_method", content_type_generation_method)
 			#print("content_type_choices", content_type_choices)
 
-			assert content_type in [None, "by_probability", "random_uniform", "operator"], "Wrong content_type"
+			#assert content_type in [None, "by_probability", "random_uniform", "operator"], "Wrong content_type"
 
 			#set content_type
 			if content_type_generation_method is None:
@@ -531,7 +577,7 @@ class GA_Toolbox:
 
 
 	def get_initial_population(self, 
-			n = 100, 
+			n, 
 			initialisation_method = None
 			):
 		if initialisation_method is None: initialisation_method = self.initialisation_method
@@ -602,13 +648,13 @@ class EA:
 			self.store_population()
 			self.total_generations += 1
 
-	def get_initial_population(self,
+	def initialise_population(self,
 			n, 
 			method
 			):
 		population = toolbox.generate_initial_population(n, method)
 		self.population = population
-		return population
+		#return population
 
 	def select_individuals(self, 
 			n, 
