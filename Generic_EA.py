@@ -346,9 +346,14 @@ class GP_Toolbox:
 			arguments = [self.evaluate(child, data) for child in node.children]
 			return node.content(*arguments)
 
-	#transformation
+	#genetic operators
+	def subtree_mutation(self, subtree_generation):
+		pass
+
+
 	def mutate(self, 
-			type = "subtree"):
+			type = "subtree",
+			subtree_function = None):
 		"""
 		type can be subtree, single_node
 		"""
