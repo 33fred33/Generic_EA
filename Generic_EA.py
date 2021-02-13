@@ -13,6 +13,14 @@ import operator
 import math
 from inspect import signature
 
+def get_arity(self, operator):
+		"""
+		Returns the arity of the method, operator or funtion as an int
+		:param operator: is a method, operator or funtion
+		"""
+		sig = signature(operator)
+		arity = len(sig.parameters)
+		return arity
 
 class Individual:
 	def __init__(
@@ -70,6 +78,57 @@ class Individual:
 			else:
 				return self.local_crowding_distance == other.local_crowding_distance
 
+################################################################################
+###################################   DT   #####################################
+################################################################################
+
+class Attribute:
+	def __init__(self,
+		type,
+		crucial_values = None,
+		available_values = None)
+	
+	self.type = type
+	self.crucial_values = crucial_values
+	self.available_values = available_values
+
+class DecisionTree_Toolbox:
+	def __init__(self,
+			output_labels = [0,1],
+			tree_type = "oblique"):
+		
+		"""
+		:param attributes are all the crucial values that each attribute knows
+		:param labels are all possible output labels in a list
+		:param tree_type can be oblique or axis-parallel
+		"""
+		self.labels = labels
+		self.attributes = {}
+		
+	def add_attribute(self,
+			name,
+			type,
+			crucial_values = None,
+			available_values = None):
+		self.attributes[name] = Attribute(type=type,
+										crucial_values=crucial_values,
+										available_values=available_values)
+										
+	def 
+
+	def attribute_mutation(self,
+			individual):
+		pass
+
+	def attribute_value_mutation(self,
+			individual):
+		pass
+			
+	def one_point_crossover(self,
+			individual1,
+			individual2):
+		pass
+			
 ################################################################################
 ###################################   GP   #####################################
 ################################################################################
