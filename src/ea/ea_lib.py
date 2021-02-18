@@ -6,52 +6,54 @@ Created on Sat Feb 13 21:41:50 2021
 Evolutionary Algorithm's library
 """
 import operator as op
-from inspect import signature
 import random as rd
 from collections import defaultdict
-#import data_loader
-
-x_train = [[2,3,4,5,6],[2,3,4,6,6]]
-x_test = [[2,3,4,7,6]]
-y_train = [2,3]
-y_test = [4]
-
-#Global variables
-generation = 0
+import numpy as np
+import src.ea.utilities as ut
 
 #############################################
 # Generic Classes ###########################
 #############################################
 
-#class dataset
-
 class Individual:
     def __init__(self
-            ,representation):
+            ,representation
+            ,generation = None):
         self.representation = representation
         self.appearence_gen = generation
         self.evaluated = False
         self.evaluation = None
+        self.comparable_values = {}
 
-class Breeder:
+    def evaluate(self, data):
+        evaluation = self.representation.evaluate(data = data)
+        self.evaluation = evaluation
+        self.evaluated = True
+
+    def __eq__(self, other):
+        for i in range(len(self.comparable_values)):
+            if self.comparable_values[i] != other.comparable_values[i]:
+                return False
+        return True
+    
+    def __lt__(self, other):
+        for i in range(len(self.comparable_values)):
+            if self.comparable_values[i] < other.comparable_values[i]:
+                return True
+            else:
+                return False
+
+class Representation:
     def __init__(self):
         pass
-
-def get_arity(operator):
-		"""
-		Returns the arity of the method, operator or funtion as an int
-		:param operator: is a method, operator or funtion
-		"""
-		sig = signature(operator)
-		arity = len(sig.parameters)
-		return arity
-
+		
 #############################################
 # Cartessian Genetic Programming ############
 #############################################
 
-class CGP_Breeder(Breeder):
+class CGP_Representation(Representation):
     def __init__(self
+            ,n_inputs
             ,n_outputs
             ,levels_back
             ,n_rows
@@ -65,7 +67,7 @@ class CGP_Breeder(Breeder):
 
         #Assignation
         self.functions = list(functions)
-        self.n_inputs = len(x_train[0])#n_inputs
+        self.n_inputs = n_inputs
         assert n_outputs >= 1
         self.n_outputs = n_outputs
         assert levels_back >= 1
@@ -78,7 +80,7 @@ class CGP_Breeder(Breeder):
 
         #Inference
         self.n_functions = len(functions)
-        self.function_arity = [get_arity(f) for f in functions]
+        self.function_arity = [ut.get_arity(f) for f in functions]
         self.n_function_nodes = n_rows * n_columns
         self.max_lenght = self.n_function_nodes + n_outputs
         self.function_set = [i for i in range(self.n_functions)]
@@ -90,7 +92,7 @@ class CGP_Breeder(Breeder):
             self.output_connection_set = [i for i in range(self.n_inputs, self.max_lenght + self.n_inputs - 1)]
         
         #self.connections_set holds the set of indexes available to connect to each column in the graph
-        self.connections_set = []
+        self.connections_set = {}
         for column in range(n_columns):
             if column > 0:
                 lower_limit = self.n_inputs + n_rows * (column - levels_back)
@@ -101,7 +103,7 @@ class CGP_Breeder(Breeder):
             if column - levels_back < 0:
                 temp += self.inputs_set
             column_connections = list(set(temp))
-            self.connections_set.append(column_connections)
+            self.connections_set[column] = column_connections
 
     def create_random(self):
         """Create a random individual"""
@@ -122,8 +124,12 @@ class CGP_Breeder(Breeder):
         graph = CGP_Graph(genotype = genotype
                 ,n_inputs = self.n_inputs
                 ,output_gene = output_gene)
-        ind = Individual(representation = graph)
-        return ind
+        return graph
+    
+    def point_mutation(self, graph):
+        pass
+
+
 
 
 class CGP_Node:
@@ -139,9 +145,12 @@ class CGP_Node:
         self.column = column
         self.inputs = input_dict
         self.active = False
-    
-    #def evaluate_node(self, inputs):
-    #    return self.function(*inputs)
+
+    def get_string(self):
+        """Returns the graph as a string"""
+        label = [self.function_index]
+        label += self.inputs.values()
+        return label
 
     def __str__(self):
         input_label = " i"
@@ -181,15 +190,18 @@ class CGP_Graph:
             if to_evaluate[p]:
                 for i in self.genotype[p].inputs.values():
                     to_evaluate[i] = True
-                self.genotype[p].active = True  
+                self.genotype[p].active = True 
+        
+        self.active_genotype = {k:v for k,v in self.genotype.items() if v.active}
 
-    def evaluate(self):
+    def evaluate(self, data = None, show_collector=False):
         """
         As in Julian MIller's CGP tutorial:
         https://www.youtube.com/watch?v=qb2R0rL4OHQ&t=625s
         Missing speed test with "while"
         """
-        for data_row in x_train:
+        output = {}
+        for i,data_row in enumerate(data):
             output_collector = {}
             for p in range(self.n_inputs):
                 output_collector[p] = data_row[p]
@@ -200,9 +212,18 @@ class CGP_Graph:
                     #for key,connection in self.genotype[p].inputs.items():
                     #    inputs[key] = output_collector[connection]
                     #output_collector[p] = self.genotype[p].function(*inputs)
-            output = [output_collector[i] for i in self.output_gene]
-            print("output",output)
+            output[i] = [output_collector[i] for i in self.output_gene]
 
+            #debugger
+            if show_collector:
+                print("output_collector")
+                for k,v in output_collector.items():
+                    if k >= self.n_inputs:
+                        print(k,v,"  ",self.genotype[k])
+                    else:
+                        print(k,v)
+        
+        return output
 
     def __str__(self):
         label = "Graph:\n"
@@ -216,6 +237,10 @@ class CGP_Graph:
         for output_gen in self.output_gene:
             label += " " + str(output_gen)
         return label
+
+    def __eq__(self, other):
+        return self.active_genotype == other.active_genotype
+
 
 
 
