@@ -2,8 +2,6 @@ from inspect import signature
 import numpy as np
 
 #Utility functions
-def same(x):
-    return x
 
 def get_arity(operator):
     """
@@ -21,9 +19,14 @@ def custom_round(num, dec=0):
         return float(num[:-2-(not dec)]+str(int(num[-2-(not dec)])+1))
     return int(float(num[:-1]))
 
-def accuracy(y, y_output, transform_function=same, address=0):
+def accuracy(y, y_output):
     n = len(y)
-    bools = [transform_function(y_output[i][address]) == y[i] for i in range(n)]
+    bools = [y_output[i] == y[i] for i in range(n)]
+    return sum(bools)/n
+
+def accuracy_in_label(y,y_output,label):
+    n = len(y)
+    bools = [y_output[i] == y[i] for i in range(n) if y[i] == label]
     return sum(bools)/n
 
 
@@ -40,6 +43,13 @@ def safe_divide_zero(a, b):
     Executes a/b. If b=0, returns 0
     """
     if b == 0 : return 0
+    else: return a/b
+
+def safe_divide_one(a, b):
+    """
+    Executes a/b. If b=0, returns 0
+    """
+    if b == 0 : return 1
     else: return a/b
 
 def signed_if(condition, a, b):
