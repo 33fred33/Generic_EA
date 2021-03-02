@@ -36,6 +36,13 @@ class Representation:
 
 class Objective:
     def __init__(self, name, best = None, worst = None, to_max = True):
+        """
+        Inputs
+        - name (string) 
+        - to_max (bool)
+        - best
+        - worst
+        """
         self.name = name
         self.to_max = to_max
         self.best = best
@@ -86,48 +93,132 @@ def tournament_selection_index(population_size, tournament_size):
     winner_index = min(competitors_indexes)
     return winner_index
 
-def fast_nondominated_sort(population, objectives):
-    pass
+def _dominates(p, q, objectives):
     """
-    Population sorting method proposed in the NSGA-II paper
-    The objectives must be conflicting
-    Creates the objective "fronts"
-    Creates an evaluation of "fronts" in the Individual instances of the population
+    Pareto dominance
+    Inputs
+    - p, q: (Individual instances)
+    - objectives: (list of Objective instances)
+    Returns
+    - (bool) p dominates q?
+    """
+    for objective in objectives:
+        p_val = p.evaluations[objective.name]
+        q_val = q.evaluations[objective.name]
+        if objective.to_max:
+            if p_val < q_val:
+                return False
+        else:
+            if p_val > q_val:
+                return False
+    return True
+
+def _set_ranks(population, conflicting_objectives, front_objective):
+    """
+    Ranks the population according to their pareto dominance front
+    The front is stored as an evaluation in every Individual instance
     Inputs
     - population: (list of Individual instances)
     - objectives: (list of Objective instances)
-    Returns
-    - (list of Individual instances) sorted population
+    - front_objective: (Objective instance) 
     """
 
-    """
-    assert len(objectives) > 1
-    self.fronts = defaultdict(lambda:[])
+    assert len(conflicting_objectives) > 1
+
+    #initialisation
+    fronts = defaultdict(lambda:[])
+
+    #front 1
     for p in population:
         p.dominated_solutions = []
         p.domination_counter = 0
         for q in population:
-            if self._dominates(p,q):
+            if _dominates(p,q, conflicting_objectives):
                 p.dominated_solutions.append(q)
-            elif self._dominates(q,p):
+            elif _dominates(q,p, conflicting_objectives):
                 p.domination_counter = p.domination_counter + 1
         if p.domination_counter == 0:
-            p.rank = 1
-            self.fronts[1].append(p)
+            p.evaluations[front_objective.name] = 1
+            fronts[1].append(p)
     
+    #rest of the fronts
     front_index = 1
-    while self.fronts[front_index] != []:
+    while fronts[front_index] != []:
         temporal_front = []
-        for p in self.fronts[front_index]:
+        for p in fronts[front_index]:
             for q in p.dominated_solutions:
                 q.domination_counter = q.domination_counter - 1
                 if q.domination_counter == 0:
-                    q.rank = front_index + 1
+                    q.evaluations[front_objective.name] = front_index + 1
                     temporal_front.append(q)
         front_index = front_index + 1
-        self.fronts[front_index] = temporal_front
+        fronts[front_index] = temporal_front
+    
+def _set_crowding_distances_by_front(population
+        ,conflicting_objectives
+        ,front_objective
+        ,cd_objective):
     """
+    Ranks the population according to their crowding distance
+    The crowding distance is stored as an evaluation in every Individual instance
+    Inputs
+    - population: (list of Individual instances)
+    - conflicting_objectives: (list of Objective instances)
+    - front_objective: (Objective instance) 
+    - cd_objective: (Objective instance)
+    """
+    assert len(conflicting_objectives) > 1
 
+    #Initialisation
+    for ind in population:
+        ind.evaluations[cd_objective.name] = 0
+    
+    front = 1
+    pop_set = [ind for ind in population if ind.evaluations[front_objective.name] == front]
+    while pop_set != []:
+        for objective in conflicting_objectives:
+            sorted_population = sort_population(population = pop_set, objectives = [objective])
+            best_individual = sorted_population[0]
+            worst_individual = sorted_population[-1]
+            best_value = best_individual.evaluations[objective.name]
+            worst_value = worst_individual.evaluations[objective.name]
+            gap = abs(best_value - worst_value)
+            best_individual.evaluations[cd_objective.name] = np.inf
+            worst_individual.evaluations[cd_objective.name] = np.inf
+            if gap != 0:
+                for idx, ind in enumerate(sorted_population[1:-1]):
+                    ind.evaluations[cd_objective.name] = ind.evaluations[cd_objective.name] + abs((sorted_population[idx + 2].evaluations[objective.name] - sorted_population[idx].evaluations[objective.name])/gap)            
+        front += 1
+        pop_set = [ind for ind in population if ind.evaluations[front_objective.name] == front]
+
+def fast_nondominated_sort(population
+        ,conflicting_objectives
+        ,front_objective
+        ,cd_objective):
+    """
+    Population sorting method proposed in the NSGA-II paper
+    The objectives must be conflicting
+    Inputs
+    - population: (list of Individual instances)
+    - conflicting_objectives: (list of Objective instances)
+    - front_objective: (Objective instance) 
+    - cd_objective: (Objective instance)
+    Returns
+    - (list of Individual instances) sorted population
+    """
+    _set_ranks(population = population
+        ,conflicting_objectives = conflicting_objectives
+        ,front_objective = front_objective)
+
+    _set_crowding_distances_by_front(population = population
+        ,conflicting_objectives = conflicting_objectives
+        ,front_objective = front_objective
+        ,cd_objective = cd_objective)
+
+    sorted_population = sort_population(population = population
+        ,objectives = [front_objective, cd_objective])
+        
+    return sorted_population
 
 #############################################
 # Cartessian Genetic Programming ############
