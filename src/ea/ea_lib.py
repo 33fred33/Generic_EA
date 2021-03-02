@@ -93,6 +93,11 @@ def tournament_selection_index(population_size, tournament_size):
     winner_index = min(competitors_indexes)
     return winner_index
 
+def get_nsgaii_objectives(front_name = "front", crowding_distance_name = "cd"):
+    fo = Objective(name=front_name, to_max = False, best=1)
+    cdo = Objective(name=crowding_distance_name, to_max = True, best=0)
+    return [fo, cdo]
+
 def _dominates(p, q, objectives):
     """
     Pareto dominance
@@ -193,19 +198,21 @@ def _set_crowding_distances_by_front(population
 
 def fast_nondominated_sort(population
         ,conflicting_objectives
-        ,front_objective
-        ,cd_objective):
+        ,nsgaii_objectives):
     """
     Population sorting method proposed in the NSGA-II paper
     The objectives must be conflicting
     Inputs
     - population: (list of Individual instances)
     - conflicting_objectives: (list of Objective instances)
-    - front_objective: (Objective instance) 
-    - cd_objective: (Objective instance)
+    - nsgaii_objectives: (list of Objective instances). They can be obtained
+        with the "get_nsgaii_objectives" method
     Returns
     - (list of Individual instances) sorted population
     """
+    front_objective = nsgaii_objectives[0]
+    cd_objective = nsgaii_objectives[1]
+
     _set_ranks(population = population
         ,conflicting_objectives = conflicting_objectives
         ,front_objective = front_objective)
@@ -307,11 +314,79 @@ class CGP_Representation(Representation):
         graph = CGP_Graph(genotype = genotype
                 ,n_inputs = self.n_inputs
                 ,output_gene = output_gene)
+        graph.find_actives()
         return graph
-    
-    def point_mutation(self, graph, rate):
+
+    def mutate_function_gene(self, function_gene):
         pass
 
+    def mutate_input_gene(self, node):
+        pass
+
+    def get_random_output_gene(self, value_to_avoid):
+        """
+        Fast method to sample
+        """
+        options = rd.sample(self.output_connection_set, k=2)
+        if options[0] != value_to_avoid:
+            new_gene = options[0]
+        else:
+            new_gene = options[1]
+        return new_gene
+
+    def get_random_function_index(self, value_to_avoid):
+        """
+        Fast method to sample
+        """
+        assert len(self.function_set) > 1
+        options = rd.sample(self.function_set, k=2)
+        if options[0] != value_to_avoid:
+            new_gene = options[0]
+        else:
+            new_gene = options[1]
+        return new_gene
+
+    def point_mutation(self, graph, percentage):
+        """
+        Inputs
+        - graph (CGP_Graph instance)
+        - percentage (float)
+        Returns
+        - (CGP_Graph instance) The mutated graph
+        """
+
+        #Create a copy of the original graph, to change it later
+        new_graph = graph.copy()
+
+        #Calculate useful variables
+        nodes_list = list(graph.genotype.values())
+        n_function_genes = graph.max_lenght + sum([n.function_arity for n in graph.genotype.values()])
+        n_genes = n_function_genes + graph.n_outputs
+        mutations = int(n_genes * percentage / 100)
+
+        #Iterate mutations times
+        for _ in range(mutations):
+            int_to_mutate = rd.randint(0, n_genes-1)
+            mutate_output_index = int_to_mutate + 1 - n_function_genes
+            
+            #if the random number falls in the output gene
+            if mutate_output_index >= 0:
+                new_gene = self.get_random_output_gene(value_to_avoid = new_graph.output_gene[mutate_output_index])
+                new_graph.output_gene[mutate_output_index] = new_gene
+            else:
+                node = rd.choice(nodes_list)
+
+                #Randomly select if the mutation will affect the function or the inputs
+                int_mutation = rd.randint(0, node.function_arity)
+                if int_mutation == node.function_arity:
+                    print("mutate_function") ######HERE
+                else:
+                    print("mutate input", int_mutation)
+        return new_graph
+
+
+    def probabilistic_mutation(self, graph, probability):
+        pass
 
 class CGP_Node:
     def __init__(self
@@ -320,12 +395,36 @@ class CGP_Node:
             ,output_index
             ,column
             ,input_dict):
+        """
+        Inputs
+        function_index: (int) reference to the function 
+            in the functions variable in the CGP_Representation class
+        function: (function)
+        output_index: (int) address of this node's output
+        column: (int) column of this node in the graph
+        input_dict: (dict with
+            key: (int) index of the input in the function
+            value: (int) the address of other node's output)
+        """
+
+        #Assignation
         self.function_index = function_index
         self.function = function
         self.output_index = output_index
         self.column = column
         self.inputs = input_dict
+
+        #Initialisation
         self.active = False
+        self.function_arity = ut.get_arity(function)
+
+    def copy(self):
+        the_copy = CGP_Node(function_index = self.function_index
+            ,function = self.function
+            ,output_index = self.output_index
+            ,column = self.column
+            ,input_dict = {k:v for k,v in self.inputs.items()})
+        return the_copy
 
     def get_string(self):
         """Returns the graph as a string"""
@@ -343,30 +442,42 @@ class CGP_Node:
         label += str(self.output_index) + " f" + str(self.function_index) + input_label
         return label
 
+    def __eq__(self, other):
+        return self.function_index == other.function_index and self.inputs == other.inputs
 
 class CGP_Graph:
-    """
-    The genotype is a list of nodes,
-    each with indexes pointing to their inputs and functions
-    The output of the graph is a dictionary, with:
-        key: the index of the output gene
-        value: the output value
-    """
     def __init__(self
             ,genotype
             ,n_inputs
             ,output_gene):
+        """
+        Inputs
+        genotype: (dictionary with:
+            key: (int) node index
+            value: (CGP_Node instance))
+        n_inputs: (int) number of inputs of the graph
+        output_gene: (list of ints) each int is a reference to a node in the genotype
+        """
         self.genotype = genotype
         self.n_inputs = n_inputs
         self.output_gene = output_gene
 
         self.n_outputs = len(output_gene)
-        self.max_graph_lenght = len(self.genotype)
-        self.n_available_connections = self.max_graph_lenght + self.n_inputs
+        self.max_lenght = len(self.genotype)
+        self.n_available_connections = self.max_lenght + self.n_inputs
         self.active_genotype = {}
-        self.find_actives()
+
+    def copy(self):
+        the_copy = CGP_Graph(genotype = {k:v.copy() for k,v in self.genotype.items()}
+            ,n_inputs = self.n_inputs
+            ,output_gene = [i for i in self.output_gene])
+        return the_copy
 
     def find_actives(self):
+        """
+        Updates the self.active_genotype variable with the
+        self.active_genotype is the active sample of self.genotype
+        """
         to_evaluate = defaultdict(lambda:False)
 
         for p in range(self.n_outputs):
@@ -390,6 +501,8 @@ class CGP_Graph:
         As in Julian MIller's CGP tutorial:
         https://www.youtube.com/watch?v=qb2R0rL4OHQ&t=625s
         """
+        if self.active_genotype == {}:
+            self.find_actives()
         output_collector = {}
         for p in range(self.n_inputs):
             output_collector[p] = data_row[p]
