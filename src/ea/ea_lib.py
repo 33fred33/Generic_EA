@@ -19,6 +19,11 @@ class Individual:
     def __init__(self
             ,representation
             ,generation = None):
+        """
+        Inputs
+        - representation: (instance from class) asssigned individual characteristics
+        - generation: (int) generation of creation of the individual
+        """
         self.representation = representation
         self.appearence_gen = generation
         self.semantics_all = {} 
@@ -317,16 +322,16 @@ class CGP_Representation(Representation):
         graph.find_actives()
         return graph
 
-    def mutate_function_gene(self, function_gene):
-        pass
-
-    def mutate_input_gene(self, node):
-        pass
-
-    def get_random_output_gene(self, value_to_avoid):
+    def get_random_output_gene(self, value_to_avoid=None):
         """
-        Fast method to sample
+        Inputs
+        - value_to_avoid: (int) index of the referenced gene
+        Returns
+        - (int) distinct valid index of the referenced gene
         """
+        if value_to_avoid is None:
+            return rd.choice(self.output_connection_set)
+        
         options = rd.sample(self.output_connection_set, k=2)
         if options[0] != value_to_avoid:
             new_gene = options[0]
@@ -334,11 +339,16 @@ class CGP_Representation(Representation):
             new_gene = options[1]
         return new_gene
 
-    def get_random_function_index(self, value_to_avoid):
+    def get_random_function_index(self, value_to_avoid=None):
         """
-        Fast method to sample
+        Inputs
+        - value_to_avoid: (int) index of the function in self.function_set
+        Returns
+        - (int) distinct valid function index
         """
-        assert len(self.function_set) > 1
+        if value_to_avoid is None:
+            return rd.choice(self.function_set)
+
         options = rd.sample(self.function_set, k=2)
         if options[0] != value_to_avoid:
             new_gene = options[0]
@@ -346,6 +356,24 @@ class CGP_Representation(Representation):
             new_gene = options[1]
         return new_gene
 
+    def get_random_input_index(self, column, value_to_avoid=None):
+        """
+        Inputs
+        - column: (int) column of the gene in the CGP Representation
+        - value_to_avoid: (int)
+        Returns
+        - (int) distinct valid input index
+        """
+        if value_to_avoid is None:
+            return rd.choice(self.connections_set[column])
+
+        options = rd.sample(self.connections_set[column], k=2)
+        if options[0] != value_to_avoid:
+            new_gene = options[0]
+        else:
+            new_gene = options[1]
+        return new_gene
+        
     def point_mutation(self, graph, percentage):
         """
         Inputs
@@ -353,37 +381,53 @@ class CGP_Representation(Representation):
         - percentage (float)
         Returns
         - (CGP_Graph instance) The mutated graph
+        - (Boolean) Was the active genotype altered?
         """
 
         #Create a copy of the original graph, to change it later
         new_graph = graph.copy()
 
         #Calculate useful variables
-        nodes_list = list(graph.genotype.values())
-        n_function_genes = graph.max_lenght + sum([n.function_arity for n in graph.genotype.values()])
-        n_genes = n_function_genes + graph.n_outputs
+        nodes_list = list(new_graph.genotype.values())
+        n_function_genes = new_graph.max_lenght + sum([n.function_arity for n in new_graph.genotype.values()])
+        n_genes = n_function_genes + new_graph.n_outputs
         mutations = int(n_genes * percentage / 100)
+        altered_active_genotype = False
 
         #Iterate mutations times
         for _ in range(mutations):
             int_to_mutate = rd.randint(0, n_genes-1)
             mutate_output_index = int_to_mutate + 1 - n_function_genes
             
-            #if the random number falls in the output gene
+            #if the random number falls in the output gene, mutate output gene
             if mutate_output_index >= 0:
                 new_gene = self.get_random_output_gene(value_to_avoid = new_graph.output_gene[mutate_output_index])
                 new_graph.output_gene[mutate_output_index] = new_gene
+                altered_active_genotype = True
+
+            #mutation will affect a node:    
             else:
                 node = rd.choice(nodes_list)
-
-                #Randomly select if the mutation will affect the function or the inputs
+                if graph.genotype[node.output_index].active:
+                    altered_active_genotype = True
                 int_mutation = rd.randint(0, node.function_arity)
-                if int_mutation == node.function_arity:
-                    print("mutate_function") ######HERE
-                else:
-                    print("mutate input", int_mutation)
-        return new_graph
 
+                #mutate function
+                if int_mutation == node.function_arity:
+                    new_func_index = self.get_random_function_index(value_to_avoid = node.function_index)
+                    node.function_index = new_func_index
+                    node.function = self.functions[new_func_index]
+
+                #mutate input index
+                else:
+                    new_input_index = self.get_random_input_index(column = node.column
+                        ,value_to_avoid = node.inputs[int_mutation])
+                    node.inputs[int_mutation] = new_input_index
+                
+                #assign the new node:
+                new_graph.genotype[node.output_index] = node
+
+        return new_graph, altered_active_genotype
 
     def probabilistic_mutation(self, graph, probability):
         pass

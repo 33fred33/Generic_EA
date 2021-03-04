@@ -19,6 +19,19 @@ def custom_round(num, dec=0):
         return float(num[:-2-(not dec)]+str(int(num[-2-(not dec)])+1))
     return int(float(num[:-1]))
 
+def threshold_map(value, threshold, output_up, output_down):
+    """
+    Inputs
+    - value: (float)
+    - threshold: (float)
+    - output_up: (python object)
+    - output_down: (python object)
+    """
+    if value > threshold:
+        return output_up
+    else:
+        return output_down
+
 def accuracy(y, y_output):
     n = len(y)
     bools = [y_output[i] == y[i] for i in range(n)]
