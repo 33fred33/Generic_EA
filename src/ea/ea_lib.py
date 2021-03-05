@@ -10,6 +10,7 @@ import random as rd
 from collections import defaultdict
 import numpy as np
 import src.ea.utilities as ut
+import matplotlib.pyplot as plt
 
 #############################################
 # Generic Classes ###########################
@@ -17,15 +18,13 @@ import src.ea.utilities as ut
 
 class Individual:
     def __init__(self
-            ,representation
-            ,generation = None):
+            ,representation):
         """
         Inputs
         - representation: (instance from class) asssigned individual characteristics
         - generation: (int) generation of creation of the individual
         """
         self.representation = representation
-        self.appearence_gen = generation
         self.semantics_all = {} 
         self.evaluations = {}
 
@@ -35,6 +34,10 @@ class Individual:
     def update_semantics_all(self,semantics_all):
         self.semantics_all = {k:v for k,v in semantics_all.items()}
 
+    def __Str__(self):
+        label = "Ind gen " + str(self.generation) + " R: " + str(self.representation)
+        return label
+ 
 class Representation:
     def __init__(self):
         pass
@@ -123,7 +126,7 @@ def _dominates(p, q, objectives):
                 return False
     return True
 
-def _set_ranks(population, conflicting_objectives, front_objective):
+def set_ranks(population, conflicting_objectives, front_objective):
     """
     Ranks the population according to their pareto dominance front
     The front is stored as an evaluation in every Individual instance
@@ -164,7 +167,7 @@ def _set_ranks(population, conflicting_objectives, front_objective):
         front_index = front_index + 1
         fronts[front_index] = temporal_front
     
-def _set_crowding_distances_by_front(population
+def set_crowding_distances_by_front(population
         ,conflicting_objectives
         ,front_objective
         ,cd_objective):
@@ -218,11 +221,11 @@ def fast_nondominated_sort(population
     front_objective = nsgaii_objectives[0]
     cd_objective = nsgaii_objectives[1]
 
-    _set_ranks(population = population
+    set_ranks(population = population
         ,conflicting_objectives = conflicting_objectives
         ,front_objective = front_objective)
 
-    _set_crowding_distances_by_front(population = population
+    set_crowding_distances_by_front(population = population
         ,conflicting_objectives = conflicting_objectives
         ,front_objective = front_objective
         ,cd_objective = cd_objective)
@@ -231,6 +234,32 @@ def fast_nondominated_sort(population
         ,objectives = [front_objective, cd_objective])
         
     return sorted_population
+
+def get_pareto_front_individuals(population, front_objective):
+    return [i for i in population if i.evaluations[front_objective.name]==front_objective.best]
+
+def plot_pareto(population, conflicting_objectives, front_objective):
+    g1 = ([i.evaluations[conflicting_objectives[0].name] for i in population if i.evaluations[front_objective.name]==front_objective.best]
+        ,[i.evaluations[conflicting_objectives[1].name] for i in population if i.evaluations[front_objective.name]]==front_objective.best)
+    
+    g2 = ([i.evaluations[conflicting_objectives[0].name] for i in population if i.evaluations[front_objective.name]!=front_objective.best]
+        ,[i.evaluations[conflicting_objectives[1].name] for i in population if i.evaluations[front_objective.name]]!=front_objective.best)
+
+    data = (g1, g2)
+    colors = ("red", "blue")
+    groups = ("pareto front", "dominated solutions")
+
+    # Create plot
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+
+    for data, color, group in zip(data, colors, groups):
+        x, y = data
+        ax.scatter(x, y, alpha=0.8, c=color, edgecolors='none', s=30, label=group)
+
+        plt.title('Objective space')
+        plt.legend(loc=2)
+        plt.show()
 
 #############################################
 # Cartessian Genetic Programming ############
@@ -397,10 +426,11 @@ class CGP_Representation(Representation):
         #Iterate mutations times
         for _ in range(mutations):
             int_to_mutate = rd.randint(0, n_genes-1)
-            mutate_output_index = int_to_mutate + 1 - n_function_genes
+            mutate_output_index = int_to_mutate - n_function_genes
             
             #if the random number falls in the output gene, mutate output gene
             if mutate_output_index >= 0:
+                #print("Mutated output", mutate_output_index, int_to_mutate, n_function_genes)
                 new_gene = self.get_random_output_gene(value_to_avoid = new_graph.output_gene[mutate_output_index])
                 new_graph.output_gene[mutate_output_index] = new_gene
                 altered_active_genotype = True
@@ -426,6 +456,9 @@ class CGP_Representation(Representation):
                 
                 #assign the new node:
                 new_graph.genotype[node.output_index] = node
+        
+        if altered_active_genotype:
+            new_graph.find_actives()
 
         return new_graph, altered_active_genotype
 
@@ -510,6 +543,7 @@ class CGP_Graph:
         self.max_lenght = len(self.genotype)
         self.n_available_connections = self.max_lenght + self.n_inputs
         self.active_genotype = {}
+        self.evaluation_skipped = False
 
     def copy(self):
         the_copy = CGP_Graph(genotype = {k:v.copy() for k,v in self.genotype.items()}
@@ -538,10 +572,8 @@ class CGP_Graph:
     def evaluate(self, data_row=None, show_collector=False):
         """
         Returns a dictionary:
-            key: the index of the row of the data
-            value: another dictionary with:
-                key: the index of the output gene
-                value: the output of the graph for that output gene
+            key: the index of the output gene
+            value: the output of the graph for that output gene
         As in Julian MIller's CGP tutorial:
         https://www.youtube.com/watch?v=qb2R0rL4OHQ&t=625s
         """
@@ -549,11 +581,14 @@ class CGP_Graph:
             self.find_actives()
         output_collector = {}
         for p in range(self.n_inputs):
+            
             output_collector[p] = data_row[p]
         #for p in range(self.n_inputs, self.n_available_connections):
         #    if self.genotype[p].active:
         #        output_collector[p] = self.genotype[p].function(*[output_collector[c] for c in self.genotype[p].inputs.values()])
         for p,v in self.active_genotype.items():
+            #print("p",p)
+            #print("inputs", self.genotype[p].inputs.values())
             output_collector[p] = self.genotype[p].function(*[output_collector[c] for c in self.genotype[p].inputs.values()])
 
         #debugger
