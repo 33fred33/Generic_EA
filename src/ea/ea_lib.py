@@ -238,28 +238,72 @@ def fast_nondominated_sort(population
 def get_pareto_front_individuals(population, front_objective):
     return [i for i in population if i.evaluations[front_objective.name]==front_objective.best]
 
-def plot_pareto(population, conflicting_objectives, front_objective):
-    g1 = ([i.evaluations[conflicting_objectives[0].name] for i in population if i.evaluations[front_objective.name]==front_objective.best]
-        ,[i.evaluations[conflicting_objectives[1].name] for i in population if i.evaluations[front_objective.name]]==front_objective.best)
+def plot_pareto(population, objectives, cluster_type = "size"):
+    unique_evals, counts = get_unique_inds_by_evals(population, objectives)
+    percentages = [c*100/sum(counts) for c in counts]
     
-    g2 = ([i.evaluations[conflicting_objectives[0].name] for i in population if i.evaluations[front_objective.name]!=front_objective.best]
-        ,[i.evaluations[conflicting_objectives[1].name] for i in population if i.evaluations[front_objective.name]]!=front_objective.best)
-
-    data = (g1, g2)
-    colors = ("red", "blue")
-    groups = ("pareto front", "dominated solutions")
-
-    # Create plot
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
-
-    for data, color, group in zip(data, colors, groups):
-        x, y = data
-        ax.scatter(x, y, alpha=0.8, c=color, edgecolors='none', s=30, label=group)
-
-        plt.title('Objective space')
-        plt.legend(loc=2)
+    if cluster_type == "size":
+        sizes = [p * 15 for p in percentages]
+        plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5,facecolors="none", color="blue",s=sizes, edgecolor="blue")
+        plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5, color="blue", marker="x", s=sizes)
+        plt.title("Known pareto front")
+        plt.grid(alpha=0.5, linestyle="--")
         plt.show()
+    
+    elif cluster_type == "color":
+        plt.scatter(unique_evals[0], unique_evals[1], c=percentages, cmap='Set1', alpha=0.7, marker="x")
+        plt.title("Pareto front distribution")
+        plt.colorbar(label="% of population clustered")
+        plt.grid(alpha=0.7, linestyle="--")
+        plt.show()
+
+def inds_same_by_evals(ind1, ind2, objectives):
+    """
+    Inputs
+    - ind1: (Individual instance)
+    - ind2: (Individual instance)
+    - objectives: (list of Objective instances)
+    Returns
+    - (bool) Are the evaluations of ind1 and ind2 the same for this objectives?
+    """
+    for obj in objectives:
+        if ind1.evaluations[obj.name] != ind2.evaluations[obj.name]:
+            return False
+    return True
+    
+def get_unique_inds_by_evals(population, objectives):
+    """
+    For plotting purposes
+    Inputs
+    - population: (list of Individual instances)
+    - objectives: (list of Objective instances)
+    Returns
+    - (list of list of floats) one list per objective
+    - (list of ints) the amount of copies found for each ind
+    """
+    filtered_population = []
+    counts = []
+    for idx1,ind1 in enumerate(population):
+        add = True
+        for ind2 in population[:idx1]:
+            if inds_same_by_evals(ind1, ind2, objectives):
+                add = False
+                break
+        if add:
+            filtered_population.append(ind1)
+            count = 1
+            for ind2 in population[idx1+1:]:
+                if inds_same_by_evals(ind1, ind2, objectives):
+                    count += 1
+            counts.append(count)
+
+    evals = []
+    for obj in objectives:
+        x = [i.evaluations[obj.name] for i in filtered_population]
+        evals.append(x)
+
+    return evals, counts
+
 
 #############################################
 # Cartessian Genetic Programming ############
@@ -528,6 +572,8 @@ class CGP_Graph:
             ,n_inputs
             ,output_gene):
         """
+        Upon creation, finding the active genotype with find_actives() is needed.
+        It is not included here for flexibility.
         Inputs
         genotype: (dictionary with:
             key: (int) node index
