@@ -11,6 +11,10 @@ from collections import defaultdict
 import numpy as np
 import src.ea.utilities as ut
 import matplotlib.pyplot as plt
+import os
+import errno
+import csv
+import pickle
 
 #############################################
 # Generic Classes ###########################
@@ -238,7 +242,7 @@ def fast_nondominated_sort(population
 def get_pareto_front_individuals(population, front_objective):
     return [i for i in population if i.evaluations[front_objective.name]==front_objective.best]
 
-def plot_pareto(population, objectives, cluster_type = "size"):
+def plot_pareto(population, objectives, cluster_type = "size", front_objective=None, path = None, name = None):
     unique_evals, counts = get_unique_inds_by_evals(population, objectives)
     percentages = [c*100/sum(counts) for c in counts]
     
@@ -248,15 +252,27 @@ def plot_pareto(population, objectives, cluster_type = "size"):
         plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5, color="blue", marker="x", s=sizes)
         plt.title("Known pareto front")
         plt.grid(alpha=0.5, linestyle="--")
-        plt.show()
+        if path is not None:
+            path = ut.verify_path(path)
+            plt.savefig(path + name + ".png")
+        else:
+            plt.show()
     
     elif cluster_type == "color":
         plt.scatter(unique_evals[0], unique_evals[1], c=percentages, cmap='Set1', alpha=0.7, marker="x")
         plt.title("Pareto front distribution")
         plt.colorbar(label="% of population clustered")
-        plt.grid(alpha=0.7, linestyle="--")
-        plt.show()
-
+        plt.grid(alpha=0.5, linestyle="--")
+        if path is not None:
+            path = ut.verify_path(path)
+            plt.savefig(path + name + ".png")
+        else:
+            plt.show()
+    
+    else:
+        print("Wrong cluster_type")
+    plt.close('all')
+    
 def inds_same_by_evals(ind1, ind2, objectives):
     """
     Inputs
@@ -304,6 +320,62 @@ def get_unique_inds_by_evals(population, objectives):
 
     return evals, counts
 
+def get_cgp_log(population, representation):
+    """
+    Inputs
+    - population: (list of Individual instances)}
+    - representation: (CGP_Representation instance)
+    Returns
+    - (list of lists of strings) Logs
+    """
+    model = population[0]
+    evaluation_keys = model.evaluations.keys()
+    eval_names = model.evaluations.keys()
+    f_idxs = [i for i in range(representation.n_functions)]
+    logs = []
+
+    #Define the header
+    header = ["Index"
+            ,"Graph_n_inputs"
+            ,"Graph_n_outputs"
+            ,"Graph_max_lenght"
+            ,"Graph_actives"
+            ,"Ind_eval_skip"]
+    header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
+    header += ["i"+str(i)+"_count" for i in range(representation.n_inputs)]
+    header += [name for name in eval_names]
+    #logs = [header]
+    
+    for idx, ind in enumerate(population):
+        graph = ind.representation
+
+        #Ind_eval_skip
+        if graph.evaluation_skipped:
+            evaluation_skipped =  1
+        else: evaluation_skipped =  0
+
+        #Node level data
+        funcs_count = [0 for _ in f_idxs]
+        used_inputs_count = [0 for _ in range(graph.n_inputs)]
+        for node in graph.active_genotype.values():
+            funcs_count[node.function_index] += 1
+            for input_idx in node.inputs.values():
+                if input_idx < graph.n_inputs:
+                    used_inputs_count[input_idx] += 1
+        evals = [str(ind.evaluations[name]) for name in eval_names]
+
+        ind_row = [idx
+            ,graph.n_inputs
+            ,graph.n_outputs
+            ,graph.max_lenght
+            ,len(graph.active_genotype)
+            ,evaluation_skipped]
+        ind_row += funcs_count
+        ind_row += used_inputs_count
+        ind_row += evals
+        logs.append(ind_row)
+
+    return header, logs
 
 #############################################
 # Cartessian Genetic Programming ############
@@ -501,8 +573,7 @@ class CGP_Representation(Representation):
                 #assign the new node:
                 new_graph.genotype[node.output_index] = node
         
-        if altered_active_genotype:
-            new_graph.find_actives()
+        new_graph.find_actives()
 
         return new_graph, altered_active_genotype
 

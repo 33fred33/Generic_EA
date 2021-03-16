@@ -1,5 +1,8 @@
 from inspect import signature
 import numpy as np
+import os
+import errno
+import csv
 
 #Utility functions
 
@@ -38,9 +41,35 @@ def accuracy(y, y_output):
     return sum(bools)/n
 
 def accuracy_in_label(y,y_output,label):
-    n = len(y)
-    bools = [y_output[i] == y[i] for i in range(n) if y[i] == label]
+    n = len([p for p in y if p==label])
+    bools = [y_output[i] == p for i,p in enumerate(y) if p == label]
     return sum(bools)/n
+
+def verify_path(tpath):
+    if tpath is None:
+        return ""
+    else:
+        if tpath[-1] != "/":
+            tpath += "/"
+
+        if not os.path.exists(os.path.dirname(tpath)):
+            try:
+                os.makedirs(os.path.dirname(tpath))
+            except OSError as exc: # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
+        return tpath
+
+def logs_to_file(logs, name, path = None):
+    """
+    logs is a dictionary with a key that can be split into two
+    """
+    path = verify_path(path)
+    with open(path + name + ".csv", mode='w') as logs_file:
+        logs_writer = csv.writer(logs_file, delimiter=',', lineterminator = '\n')
+        for row in logs:
+            str_row = [str(v) for v in row]
+            logs_writer.writerow(str_row)
 
 
 #Operations
