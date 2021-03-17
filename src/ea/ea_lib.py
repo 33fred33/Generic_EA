@@ -22,7 +22,8 @@ import pickle
 
 class Individual:
     def __init__(self
-            ,representation):
+            ,representation
+            ,created_in_gen):
         """
         Inputs
         - representation: (instance from class) asssigned individual characteristics
@@ -31,6 +32,7 @@ class Individual:
         self.representation = representation
         self.semantics_all = {} 
         self.evaluations = {}
+        self.created_in_gen = created_in_gen
 
     def update_evaluation(self,objective,value):
         self.evaluations[objective.name] = value
@@ -259,7 +261,7 @@ def plot_pareto(population, objectives, cluster_type = "size", front_objective=N
             plt.show()
     
     elif cluster_type == "color":
-        plt.scatter(unique_evals[0], unique_evals[1], c=percentages, cmap='Set1', alpha=0.7, marker="x")
+        plt.scatter(unique_evals[0], unique_evals[1], c=percentages, cmap='viridis', alpha=0.7, marker="x")
         plt.title("Pareto front distribution")
         plt.colorbar(label="% of population clustered")
         plt.grid(alpha=0.5, linestyle="--")
@@ -320,22 +322,39 @@ def get_unique_inds_by_evals(population, objectives):
 
     return evals, counts
 
-def get_cgp_log(population, representation):
+def get_cgp_log(population, representation, current_gen):
     """
     Inputs
     - population: (list of Individual instances)}
     - representation: (CGP_Representation instance)
+    - current_gen: (int)
     Returns
-    - (list of lists of strings) Logs
+    - (list of strings) header of the individual level logs
+    - (list of lists of numbers) individual level logs
+    - (list of strings) header of the generation level logs
+    - (list of lists of numbers) generation level logs
     """
+    pop_size = len(population)
     model = population[0]
     evaluation_keys = model.evaluations.keys()
     eval_names = model.evaluations.keys()
+    n_evals = len(eval_names)
     f_idxs = [i for i in range(representation.n_functions)]
     logs = []
 
+    #Variables to gather generational info
+    nodes_evaluated = 0
+    total_age = 0
+    total_actives = 0
+    total_skips = 0
+    total_funcs_count = [0 for _ in f_idxs]
+    total_used_inputs_count = [0 for _ in range(model.representation.n_inputs)]
+    total_evals = [0 for _ in range(n_evals)]
+
     #Define the header
     header = ["Index"
+            ,"Generation"
+            ,"Age"
             ,"Graph_n_inputs"
             ,"Graph_n_outputs"
             ,"Graph_max_lenght"
@@ -344,15 +363,34 @@ def get_cgp_log(population, representation):
     header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
     header += ["i"+str(i)+"_count" for i in range(representation.n_inputs)]
     header += [name for name in eval_names]
-    #logs = [header]
+
+    gen_header = ["Gen"
+                ,"Eval_nodes"
+                ,"Avg_age"
+                ,"Avg_active_nodes"
+                ,"Eval_skips"
+                ,"Eval_skips_ptg"]
+    gen_header += ["f"+str(f_idx)+"_presence" for f_idx in f_idxs]
+    gen_header += ["i"+str(i)+"_presence" for i in range(representation.n_inputs)]
+    gen_header += ["Avg_" + name for name in eval_names]
     
     for idx, ind in enumerate(population):
         graph = ind.representation
+        graph_actives = len(graph.active_genotype)
+
+        #Gathered data for gen_logs
+        total_age += current_gen - ind.created_in_gen
+        total_actives += graph_actives
+
 
         #Ind_eval_skip
         if graph.evaluation_skipped:
             evaluation_skipped =  1
-        else: evaluation_skipped =  0
+            total_skips += 1
+        else: 
+            evaluation_skipped =  0
+            if ind.created_in_gen == current_gen-1:
+                nodes_evaluated += graph_actives
 
         #Node level data
         funcs_count = [0 for _ in f_idxs]
@@ -362,20 +400,41 @@ def get_cgp_log(population, representation):
             for input_idx in node.inputs.values():
                 if input_idx < graph.n_inputs:
                     used_inputs_count[input_idx] += 1
-        evals = [str(ind.evaluations[name]) for name in eval_names]
+        evals = [ind.evaluations[name] for name in eval_names]
+        total_evals = [total_evals[i] + evals[i] for i in range(n_evals)]
+        total_funcs_count = [total_funcs_count[i] + funcs_count[i] for i in f_idxs]
+        total_used_inputs_count = [total_used_inputs_count[i] + used_inputs_count[i] for i in range(graph.n_inputs)]
 
+        #Individual level logs
         ind_row = [idx
+            ,current_gen
+            ,current_gen - ind.created_in_gen
             ,graph.n_inputs
             ,graph.n_outputs
             ,graph.max_lenght
-            ,len(graph.active_genotype)
+            ,graph_actives
             ,evaluation_skipped]
         ind_row += funcs_count
         ind_row += used_inputs_count
         ind_row += evals
         logs.append(ind_row)
+    
+    #Generation level logs
+    
+    gen_row = [current_gen
+            ,nodes_evaluated
+            ,total_age/pop_size
+            ,total_actives/pop_size
+            ,total_skips
+            ,total_skips*100/pop_size]
+    gen_row += [total_funcs_count[i]*100/sum(total_funcs_count) for i in f_idxs]
+    gen_row += [total_used_inputs_count[i]*100/sum(total_used_inputs_count) for i in range(graph.n_inputs)]
+    gen_row += [v/pop_size for v in total_evals]
+    
 
-    return header, logs
+    
+    return header, logs, gen_header, gen_row
+
 
 #############################################
 # Cartessian Genetic Programming ############
