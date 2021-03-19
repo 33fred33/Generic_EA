@@ -22,8 +22,11 @@ class Dataset:
                     ,delimiter = ",")
             n_data = np.array([[d for d in row] for row in data])
             self.x_train = n_data[:,:-1]
+            self.x_train = np.array([[float(v.decode('UTF-8')) for v in row] for row in self.x_train])
             self.y_train = n_data[:,-1]
             self.y_train = np.array([v.decode('UTF-8') for v in self.y_train])
+            self.y_train = np.array([1 if v=="g" else 0 for v in self.y_train])
+            
         elif name == "spect":
             data = np.genfromtxt("src\ea\data\spect.dat"
                     ,skip_header=1
