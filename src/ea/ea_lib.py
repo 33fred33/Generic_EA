@@ -15,6 +15,8 @@ import os
 import errno
 import csv
 import pickle
+import statistics as stat
+
 
 #############################################
 # Generic Classes ###########################
@@ -430,10 +432,44 @@ def get_cgp_log(population, representation, current_gen):
     gen_row += [total_funcs_count[i]*100/sum(total_funcs_count) for i in f_idxs]
     gen_row += [total_used_inputs_count[i]*100/sum(total_used_inputs_count) for i in range(graph.n_inputs)]
     gen_row += [v/pop_size for v in total_evals]
+    #gen_row += [v/pop_size for v in total_evals]
     
 
     
     return header, logs, gen_header, gen_row
+
+def hyperarea(population, objectives, front_objective):
+    """
+    Inputs
+    population: (list of Individual instances) Individuals part of the pareto set
+    objectives: (list of Objective instances (len=2))
+    Returns
+    (float) The hyperarea
+    """
+    assert len(objectives) == 2
+
+    #Variables
+    obj0 = objectives[0]
+    obj1 = objectives[1]
+    hyperarea = 0
+
+    #Filter population to get pareto front only and sort
+    front_pop = get_pareto_front_individuals(population, front_objective)
+    sorted_pop = sort_population(front_pop, [obj0])
+
+    #Iteration
+    for ind_idx, ind in enumerate(reversed(sorted_pop)):
+        if ind_idx == 0:
+            last_value = ind.evaluations[obj0.name]
+            hyperarea += (abs(last_value - obj0.worst)
+                        *abs(ind.evaluations[obj1.name] - obj1.worst))
+        else:
+            new_value = ind.evaluations[obj0.name]
+            if (new_value != last_value):
+                hyperarea += (abs(new_value - last_value)
+                        *abs(ind.evaluations[obj1.name] - obj1.worst))
+                last_value = new_value
+    return hyperarea
 
 
 #############################################
