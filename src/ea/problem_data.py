@@ -1,4 +1,5 @@
 import numpy as np
+import os
 
 class Dataset:
     def __init__(self
@@ -15,8 +16,9 @@ class Dataset:
         """
         Available names: ion, spect
         """
+        path = os.path.join("src","ea","data","")
         if name == "ion":
-            data = np.genfromtxt("src\ea\data\ionosphere.dat"
+            data = np.genfromtxt(path + "ionosphere.dat"
                     ,skip_header=1
                     ,dtype=None
                     ,delimiter = ",")
@@ -28,7 +30,7 @@ class Dataset:
             self.y_train = np.array([1 if v=="g" else 0 for v in self.y_train])
             
         elif name == "spect":
-            data = np.genfromtxt("src\ea\data\spect.dat"
+            data = np.genfromtxt(path + "spect.dat"
                     ,skip_header=1
                     ,dtype=None
                     ,delimiter = ",")
@@ -36,7 +38,7 @@ class Dataset:
             self.y_train = data[:,-1]
 
         elif name == "yst_m3":
-            data = np.genfromtxt("src\ea\data\yst_m3.dat"
+            data = np.genfromtxt(path + "yst_m3.dat"
                     ,dtype=None
                     ,delimiter = ",")
             n_data = np.array([[d for d in row] for row in data])
@@ -48,7 +50,7 @@ class Dataset:
             
 
         elif name == "yst_mit":
-            data = np.genfromtxt("src\ea\data\yst_mit.dat"
+            data = np.genfromtxt(path + "yst_mit.dat"
                     ,dtype=None
                     ,delimiter = ",")
             n_data = np.array([[d for d in row] for row in data])
