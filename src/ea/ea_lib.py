@@ -16,6 +16,7 @@ import errno
 import csv
 import pickle
 import statistics as stat
+import math
 
 
 #############################################
@@ -176,6 +177,13 @@ def _dominates(p, q, objectives):
             if p_val > q_val:
                 return False
     return True
+
+def objective_space_euclidean_distance(ind1, ind2, objectives):
+    pd = 0
+    for obj in objectives:
+        d = abs(ind1.evaluations[obj.name] - ind2.evaluations[obj.name])
+        pd = math.sqrt(pd**2 + d**2)
+    return pd
 
 def get_pareto_front_individuals(population, objectives):
     """
@@ -387,19 +395,28 @@ def get_spea2_objective(spea2_fitness_name = "spea2_fitness"):
 
 def spea2_sort(population, conflicting_objectives, spea2_objective):
     pop_size = len(population)
+    k_neighbor_idx = int(math.sqrt(pop_size))
     strengths = {i:0 for i in range(pop_size)}
     dominators = {i:[] for i in range(pop_size)}
+    distances = {j:{i:np.inf for i in range(pop_size)} for j in range(pop_size)}
     for ind_idx, ind in enumerate(population[:-1]):
-        for ind2_idx, ind2 in enumerate(population[ind_idx+1:]):
+        for temp_idx, ind2 in enumerate(population[ind_idx+1:]):
+            ind2_idx = temp_idx + ind_idx + 1
+            d = objective_space_euclidean_distance(ind, ind2, conflicting_objectives)
+            distances[ind_idx][ind2_idx] = d
+            distances[ind2_idx][ind_idx] = d
             if _dominates(ind, ind2, conflicting_objectives):
                 strengths[ind_idx] += 1
                 dominators[ind2_idx] += [ind_idx]
             elif _dominates(ind2, ind, conflicting_objectives):
                 strengths[ind2_idx] += 1
                 dominators[ind_idx] += [ind2_idx]
+                
 
     for ind_idx, ind in enumerate(population):
-        spea2_fitness = sum([strengths[d] for d in dominators[ind_idx]])
+        k_neighbor_d = sorted(distances[ind_idx].values())[k_neighbor_idx]
+        density = 1/(k_neighbor_d+2)
+        spea2_fitness = sum([strengths[d] for d in dominators[ind_idx]]) + density
         ind.evaluations[spea2_objective.name] = spea2_fitness
 
     sorted_population = sort_population(population = population
