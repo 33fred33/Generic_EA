@@ -60,6 +60,8 @@ for i,ind in enumerate(population):
 #### MOEA CGP ###############################################
 ################################################################
 
+#EXPERIMENT 1: 
+
 ## CGP params
 levels_back = 200
 n_rows = 1
@@ -73,12 +75,18 @@ functions_as_string = "[op.add,op.sub,op.mul,ut.safe_divide_one]"
 ## MOEA params
 trials = 30
 seed = 0
-node_max_evals = 50000000
+node_max_evals = 100000000
 population_size = 200
 tournament_size = 5
 mutation_percentage = 9
-#problem_name = "spect"
-problem_name = "ion"
+
+moea_sorting_method = "SPEA2"
+#moea_sorting_methods: NSGAII, SPEA2
+
+problem_name = "spect"
+#problem_names = ion, spect, yst_m3, yst_mit
+
+#Objectives
 objectives = [
     ea.Objective(name="acc0", to_max = True, best=1, worst=0),
     ea.Objective(name="acc1", to_max = True, best=1, worst=0)
@@ -87,12 +95,13 @@ generation_objective = ea.Objective(name="generation", to_max = True)
 nsgaii_objectives = ea.get_nsgaii_objectives()
 front_objective = nsgaii_objectives[0]
 cd_objective = nsgaii_objectives[1]
+spea2_objective = ea.get_spea2_objective()
 
 ## Experiment parameters
 rd.seed(seed)
 now = datetime.now()
 time_string = now.strftime('%Y_%m_%d-%H_%M_%S')
-output_path = "outputs/NSGAII_cgp-" + problem_name + "-" + time_string + "/"
+output_path = os.path.join("outputs","NSGAII_cgp-" + problem_name + "-" + time_string, "")
 
 #Instantiation
 dataset = pb.Dataset()
@@ -121,7 +130,8 @@ param_logs = [["rd.seed" , seed]
             ,["n_outputs ", n_outputs]
             ,["allow_input_to_output ", allow_input_to_output]
             ,["inputs_available_to_all_columns ", inputs_available_to_all_columns]
-            ,["functions ", functions_as_string]]
+            ,["functions ", functions_as_string]
+            ,["moea_sorting_method", moea_sorting_method]]
 ut.logs_to_file(param_logs, "param_logs", output_path)
 
 def evaluate_ind(ind):
@@ -144,27 +154,31 @@ def evaluate_ind(ind):
     ind.update_evaluation(objective = objectives[1], value = acc1)
     ind.update_semantics_all(semantics_all = outputs)
 
-    #evaluated_nodes = len(ind.representation.active_genotype)
-    #return evaluated_nodes
+
+def sort_pop_moea(population):
+    if moea_sorting_method == "NSGAII":
+        s_population = ea.fast_nondominated_sort(population = population, conflicting_objectives = objectives, nsgaii_objectives = nsgaii_objectives)
+    elif moea_sorting_method == "SPEA2":
+        s_population = ea.spea2_sort(population = population, conflicting_objectives = objectives, spea2_objective = spea2_objective)
+    else:
+        print("Wrong sorting method")
+    return s_population
 
 
 
-#Generation NSGA-II
-def run_NSGA_II_gen(population, current_gen):
+#Generation
+def run_gen(population, current_gen):
+
     start_t = time.time()
 
-    #Sort the population. The generation of creation is the latest tiebreak (suggested in CGP), so fast_nondominated_sort cannot be used as it is
-    sorted_population = ea.fast_nondominated_sort(population = population, conflicting_objectives = objectives, nsgaii_objectives = nsgaii_objectives)
-
-    """
-    3 criteria sort:
-    ea.set_ranks(population = population, conflicting_objectives = objectives, front_objective = front_objective)
-    ea.set_crowding_distances_by_front(population = population, conflicting_objectives = objectives, front_objective = front_objective, cd_objective = cd_objective)
-    sorted_population = ea.sort_population(population = population, objectives = [front_objective, cd_objective, generation_objective])
-    """
+    #Sort the population.
+    sorted_population = sort_pop_moea(population)
 
     #Logs (for previous gen)
+    hyperarea = ea.hyperarea(population, objectives)
     header, logs, g_header, g_logs = ea.get_cgp_log(sorted_population, cgp, current_gen)
+    g_logs += [hyperarea]
+    g_header += ["Hyperarea"]
 
     #Elitism
     parent_population = sorted_population[:population_size]
@@ -194,18 +208,17 @@ def run_NSGA_II_gen(population, current_gen):
     #Formation of the population for the next gen
     population = offspring_population + parent_population
 
-    #print("Gen " , str(current_gen), " time: ", str(time.time()-start_t))
-    #print_logs(population)
     return population, header, logs, g_header, g_logs
 
 
 
-
 #Execution
-
 for exp_idx in range(trials):
     print("run:", str(exp_idx+1))
-    path = output_path + "run" + str(exp_idx) + "/"
+    #path = output_path + "run" + str(exp_idx) + "/"
+    path = os.path.join(output_path + "run" + str(exp_idx), "")
+    
+    
     #Initial generation
     generation = 0
     individual_level_logs = []
@@ -221,7 +234,7 @@ for exp_idx in range(trials):
     #Evaluate and sort the population according to non-domination
     for ind in parent_population:
         evaluate_ind(ind)
-    sorted_nsga2_population = ea.fast_nondominated_sort(population = parent_population, conflicting_objectives = objectives, nsgaii_objectives = nsgaii_objectives)
+    first_sorted_population = sort_pop_moea(parent_population)
 
     #Create the offsprings of the initial generation
     population = parent_population
@@ -229,7 +242,7 @@ for exp_idx in range(trials):
 
         #Binary tournament selection is used in the initial generation only according to NSGA-II. The offspring is evaluated and added to the population
         parent_index = ea.tournament_selection_index(population_size = population_size, tournament_size = 2)
-        parent = sorted_nsga2_population[parent_index]
+        parent = first_sorted_population[parent_index]
         new_graph, active_altered = cgp.point_mutation(graph = parent.representation, percentage = mutation_percentage)
         offspring = ea.Individual(representation = new_graph, created_in_gen = generation)
 
@@ -251,7 +264,8 @@ for exp_idx in range(trials):
     #Main loop
     while True:
         generation += 1
-        population, header, logs, g_header, g_logs = run_NSGA_II_gen(population, generation)
+        population, header, logs, g_header, g_logs = run_gen(population, generation)
+        
 
         #Logs
         individual_level_logs += logs
@@ -263,9 +277,7 @@ for exp_idx in range(trials):
             ea.plot_pareto(population, objectives, "size", path = path, name = "plt_size_g"+str(generation))
             ea.plot_pareto(population, objectives, "color", path = path, name = "plt_color_g"+str(generation))
 
-            individual_level_logs.insert(0, header)
             ut.logs_to_file(individual_level_logs, "Ind_logs", path)
-            gen_level_logs.insert(0, g_header)
             ut.logs_to_file(gen_level_logs, "Gen_logs", path)
         
         #stop_criteria:
@@ -278,7 +290,8 @@ for exp_idx in range(trials):
 
 
     #Final plots
-    population = ea.fast_nondominated_sort(population = population, conflicting_objectives = objectives, nsgaii_objectives = nsgaii_objectives)
+    population = sort_pop_moea(population)
+
     ea.plot_pareto(population, objectives, "size", path = path, name = "plt_size_g"+str(generation))
     ea.plot_pareto(population, objectives, "color", path = path, name = "plt_color_g"+str(generation))
 

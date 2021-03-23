@@ -49,8 +49,8 @@ def verify_path(tpath):
     if tpath is None:
         return ""
     else:
-        if tpath[-1] != "/":
-            tpath += "/"
+        #if tpath[-1] != "/":
+        #    tpath += "/"
 
         if not os.path.exists(os.path.dirname(tpath)):
             try:

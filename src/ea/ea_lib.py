@@ -108,12 +108,55 @@ def tournament_selection_index(population_size, tournament_size):
     competitors_indexes = rd.sample(range(population_size),k=tournament_size)
     winner_index = min(competitors_indexes)
     return winner_index
+  
+def inds_same_by_evals(ind1, ind2, objectives):
+    """
+    Inputs
+    - ind1: (Individual instance)
+    - ind2: (Individual instance)
+    - objectives: (list of Objective instances)
+    Returns
+    - (bool) Are the evaluations of ind1 and ind2 the same for this objectives?
+    """
+    for obj in objectives:
+        if ind1.evaluations[obj.name] != ind2.evaluations[obj.name]:
+            return False
+    return True
+    
+def get_unique_inds_by_evals(population, objectives):
+    """
+    For plotting purposes
+    Inputs
+    - population: (list of Individual instances)
+    - objectives: (list of Objective instances)
+    Returns
+    - (list of list of floats) one list per objective
+    - (list of ints) the amount of copies found for each ind
+    """
+    filtered_population = []
+    counts = []
+    for idx1,ind1 in enumerate(population):
+        add = True
+        for ind2 in population[:idx1]:
+            if inds_same_by_evals(ind1, ind2, objectives):
+                add = False
+                break
+        if add:
+            filtered_population.append(ind1)
+            count = 1
+            for ind2 in population[idx1+1:]:
+                if inds_same_by_evals(ind1, ind2, objectives):
+                    count += 1
+            counts.append(count)
 
-def get_nsgaii_objectives(front_name = "front", crowding_distance_name = "cd"):
-    fo = Objective(name=front_name, to_max = False, best=1)
-    cdo = Objective(name=crowding_distance_name, to_max = True, best=0)
-    return [fo, cdo]
+    evals = []
+    for obj in objectives:
+        x = [i.evaluations[obj.name] for i in filtered_population]
+        evals.append(x)
 
+    return evals, counts
+
+#MOEA exclusive methods
 def _dominates(p, q, objectives):
     """
     Pareto dominance
@@ -133,6 +176,100 @@ def _dominates(p, q, objectives):
             if p_val > q_val:
                 return False
     return True
+
+def get_pareto_front_individuals(population, objectives):
+    """
+    Inputs
+    population: (list of Individual instances) Individuals part of the pareto set
+    objectives: (list of Objective instances) 
+    Returns
+    (list of Individual instances) Only non-dominated individuals
+    """
+    front_population = []
+    for idx_p, p in enumerate(population):
+        add = True
+        for idx_q, q in enumerate(population):
+            if idx_p != idx_q:
+                if _dominates(q, p, objectives):
+                    add = False
+                    break
+        if add:
+            front_population.append(p)
+
+    return front_population
+
+def hyperarea(population, objectives):
+    """
+    Inputs
+    population: (list of Individual instances) Individuals part of the pareto set
+    objectives: (list of Objective instances (len=2))
+    Returns
+    (float) The hyperarea
+    """
+    assert len(objectives) == 2
+
+    #Variables
+    obj0 = objectives[0]
+    obj1 = objectives[1]
+    hyperarea = 0
+
+    #Filter population to get pareto front only and sort
+    front_pop = get_pareto_front_individuals(population, objectives)
+    sorted_pop = sort_population(front_pop, [obj0])
+
+    #Iteration
+    for ind_idx, ind in enumerate(reversed(sorted_pop)):
+        if ind_idx == 0:
+            last_value = ind.evaluations[obj0.name]
+            hyperarea += (abs(last_value - obj0.worst)
+                        *abs(ind.evaluations[obj1.name] - obj1.worst))
+        else:
+            new_value = ind.evaluations[obj0.name]
+            if (new_value != last_value):
+                hyperarea += (abs(new_value - last_value)
+                        *abs(ind.evaluations[obj1.name] - obj1.worst))
+                last_value = new_value
+    return hyperarea
+
+def plot_pareto(population, objectives, cluster_type = "size", front_objective=None, path = None, name = None):
+    unique_evals, counts = get_unique_inds_by_evals(population, objectives)
+    percentages = [c*100/sum(counts) for c in counts]
+    
+    if cluster_type == "size":
+        sizes = [p * 15 for p in percentages]
+        plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5,facecolors="none", color="blue",s=sizes, edgecolor="blue")
+        plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5, color="blue", marker="x", s=sizes)
+        plt.title("Known pareto front")
+        plt.grid(alpha=0.5, linestyle="--")
+        if path is not None:
+            path = ut.verify_path(path)
+            plt.savefig(path + name + ".png")
+        else:
+            plt.show()
+    
+    elif cluster_type == "color":
+        plt.scatter(unique_evals[0], unique_evals[1], c=percentages, cmap='viridis', alpha=0.7, marker="x")
+        plt.title("Pareto front distribution")
+        plt.colorbar(label="% of population clustered")
+        plt.grid(alpha=0.5, linestyle="--")
+        if path is not None:
+            path = ut.verify_path(path)
+            plt.savefig(path + name + ".png")
+        else:
+            plt.show()
+    
+    else:
+        print("Wrong cluster_type")
+    plt.close('all')
+
+#NSGAII exclusive methods
+def get_nsgaii_objectives(front_name = "front", crowding_distance_name = "cd"):
+    fo = Objective(name=front_name, to_max = False, best=1)
+    cdo = Objective(name=crowding_distance_name, to_max = True,  worst=0)
+    return [fo, cdo]
+
+def get_front_n(population, front_objective, n=1):
+    return [i for i in population if i.evaluations[front_objective.name]==n]
 
 def set_ranks(population, conflicting_objectives, front_objective):
     """
@@ -243,87 +380,34 @@ def fast_nondominated_sort(population
         
     return sorted_population
 
-def get_pareto_front_individuals(population, front_objective):
-    return [i for i in population if i.evaluations[front_objective.name]==front_objective.best]
+#SPEA2 exclusive methods
+def get_spea2_objective(spea2_fitness_name = "spea2_fitness"):
+    spea2_fitness_objective = Objective(name=spea2_fitness_name, to_max = False, best=0)
+    return spea2_fitness_objective
 
-def plot_pareto(population, objectives, cluster_type = "size", front_objective=None, path = None, name = None):
-    unique_evals, counts = get_unique_inds_by_evals(population, objectives)
-    percentages = [c*100/sum(counts) for c in counts]
-    
-    if cluster_type == "size":
-        sizes = [p * 15 for p in percentages]
-        plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5,facecolors="none", color="blue",s=sizes, edgecolor="blue")
-        plt.scatter(unique_evals[0], unique_evals[1], alpha=0.5, color="blue", marker="x", s=sizes)
-        plt.title("Known pareto front")
-        plt.grid(alpha=0.5, linestyle="--")
-        if path is not None:
-            path = ut.verify_path(path)
-            plt.savefig(path + name + ".png")
-        else:
-            plt.show()
-    
-    elif cluster_type == "color":
-        plt.scatter(unique_evals[0], unique_evals[1], c=percentages, cmap='viridis', alpha=0.7, marker="x")
-        plt.title("Pareto front distribution")
-        plt.colorbar(label="% of population clustered")
-        plt.grid(alpha=0.5, linestyle="--")
-        if path is not None:
-            path = ut.verify_path(path)
-            plt.savefig(path + name + ".png")
-        else:
-            plt.show()
-    
-    else:
-        print("Wrong cluster_type")
-    plt.close('all')
-    
-def inds_same_by_evals(ind1, ind2, objectives):
-    """
-    Inputs
-    - ind1: (Individual instance)
-    - ind2: (Individual instance)
-    - objectives: (list of Objective instances)
-    Returns
-    - (bool) Are the evaluations of ind1 and ind2 the same for this objectives?
-    """
-    for obj in objectives:
-        if ind1.evaluations[obj.name] != ind2.evaluations[obj.name]:
-            return False
-    return True
-    
-def get_unique_inds_by_evals(population, objectives):
-    """
-    For plotting purposes
-    Inputs
-    - population: (list of Individual instances)
-    - objectives: (list of Objective instances)
-    Returns
-    - (list of list of floats) one list per objective
-    - (list of ints) the amount of copies found for each ind
-    """
-    filtered_population = []
-    counts = []
-    for idx1,ind1 in enumerate(population):
-        add = True
-        for ind2 in population[:idx1]:
-            if inds_same_by_evals(ind1, ind2, objectives):
-                add = False
-                break
-        if add:
-            filtered_population.append(ind1)
-            count = 1
-            for ind2 in population[idx1+1:]:
-                if inds_same_by_evals(ind1, ind2, objectives):
-                    count += 1
-            counts.append(count)
+def spea2_sort(population, conflicting_objectives, spea2_objective):
+    pop_size = len(population)
+    strengths = {i:0 for i in range(pop_size)}
+    dominators = {i:[] for i in range(pop_size)}
+    for ind_idx, ind in enumerate(population[:-1]):
+        for ind2_idx, ind2 in enumerate(population[ind_idx+1:]):
+            if _dominates(ind, ind2, conflicting_objectives):
+                strengths[ind_idx] += 1
+                dominators[ind2_idx] += [ind_idx]
+            elif _dominates(ind2, ind, conflicting_objectives):
+                strengths[ind2_idx] += 1
+                dominators[ind_idx] += [ind2_idx]
 
-    evals = []
-    for obj in objectives:
-        x = [i.evaluations[obj.name] for i in filtered_population]
-        evals.append(x)
+    for ind_idx, ind in enumerate(population):
+        spea2_fitness = sum([strengths[d] for d in dominators[ind_idx]])
+        ind.evaluations[spea2_objective.name] = spea2_fitness
 
-    return evals, counts
+    sorted_population = sort_population(population = population
+        ,objectives = [spea2_objective])
+    
+    return sorted_population
 
+#Logs and data
 def get_cgp_log(population, representation, current_gen):
     """
     Inputs
@@ -437,40 +521,6 @@ def get_cgp_log(population, representation, current_gen):
 
     
     return header, logs, gen_header, gen_row
-
-def hyperarea(population, objectives, front_objective):
-    """
-    Inputs
-    population: (list of Individual instances) Individuals part of the pareto set
-    objectives: (list of Objective instances (len=2))
-    Returns
-    (float) The hyperarea
-    """
-    assert len(objectives) == 2
-
-    #Variables
-    obj0 = objectives[0]
-    obj1 = objectives[1]
-    hyperarea = 0
-
-    #Filter population to get pareto front only and sort
-    front_pop = get_pareto_front_individuals(population, front_objective)
-    sorted_pop = sort_population(front_pop, [obj0])
-
-    #Iteration
-    for ind_idx, ind in enumerate(reversed(sorted_pop)):
-        if ind_idx == 0:
-            last_value = ind.evaluations[obj0.name]
-            hyperarea += (abs(last_value - obj0.worst)
-                        *abs(ind.evaluations[obj1.name] - obj1.worst))
-        else:
-            new_value = ind.evaluations[obj0.name]
-            if (new_value != last_value):
-                hyperarea += (abs(new_value - last_value)
-                        *abs(ind.evaluations[obj1.name] - obj1.worst))
-                last_value = new_value
-    return hyperarea
-
 
 #############################################
 # Cartessian Genetic Programming ############
