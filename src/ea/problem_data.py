@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import random as rd
 
 class Dataset:
     def __init__(self
@@ -11,8 +12,9 @@ class Dataset:
         self.x_test = x_test
         self.y_train = y_train
         self.y_test = y_test
+        self.labels = None
 
-    def load_problem(self,name):
+    def load_problem(self,name, test_train_rate=0.5, keep_labels_ratio = True, seed = None):
         """
         Available names: ion, spect
         """
@@ -63,3 +65,11 @@ class Dataset:
 
         else:
             print("Unknown problem name")
+
+
+
+        self.labels = list(set(self.y_train))
+
+        if keep_labels_ratio:
+            pass
+        

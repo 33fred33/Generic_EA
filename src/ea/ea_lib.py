@@ -52,18 +52,20 @@ class Representation:
         pass
 
 class Objective:
-    def __init__(self, name, best = None, worst = None, to_max = True):
+    def __init__(self, name, best = None, worst = None, to_max = True, eval_function = None):
         """
         Inputs
         - name (string) 
         - to_max (bool)
         - best
         - worst
+        - eval_function (function) function to be called when evaluating the objective
         """
         self.name = name
         self.to_max = to_max
         self.best = best
         self.worst = worst
+        self.eval_function = eval_function
 
 def sort_population(population, objectives):
     """
@@ -156,6 +158,17 @@ def get_unique_inds_by_evals(population, objectives):
         evals.append(x)
 
     return evals, counts
+
+def semantic_distance(ind1, ind2):
+    """
+    Inputs
+    - ind1, ind2 (Individual instances)
+    Returns
+    - (float) Average of absolute difference in semantics
+    """
+    return sum([abs(v-ind2.semantics_all[k]) for k,v in ind1.semantics_all.items()]) / len(ind1.semantics_all)
+
+
 
 #MOEA exclusive methods
 def _dominates(p, q, objectives):
@@ -681,6 +694,29 @@ class CGP_Representation(Representation):
             new_gene = options[1]
         return new_gene
         
+    def mutate_node(self, node):
+        """
+        Inputs
+        - node (CGP_Node instance)
+        Outputs
+        (CGP node instance) mutated node
+        """
+        int_mutation = rd.randint(0, node.function_arity)
+
+        #mutate function
+        if int_mutation == node.function_arity:
+            new_func_index = self.get_random_function_index(value_to_avoid = node.function_index)
+            node.function_index = new_func_index
+            node.function = self.functions[new_func_index]
+
+        #mutate input index
+        else:
+            new_input_index = self.get_random_input_index(column = node.column
+                ,value_to_avoid = node.inputs[int_mutation])
+            node.inputs[int_mutation] = new_input_index
+        
+        return node
+
     def point_mutation(self, graph, percentage):
         """
         Inputs
@@ -715,30 +751,57 @@ class CGP_Representation(Representation):
 
             #mutation will affect a node:    
             else:
-                node = rd.choice(nodes_list)
+                #node = rd.choice(nodes_list)
+                node = nodes_list[mutate_output_index]
                 if graph.genotype[node.output_index].active:
                     altered_active_genotype = True
-                int_mutation = rd.randint(0, node.function_arity)
-
-                #mutate function
-                if int_mutation == node.function_arity:
-                    new_func_index = self.get_random_function_index(value_to_avoid = node.function_index)
-                    node.function_index = new_func_index
-                    node.function = self.functions[new_func_index]
-
-                #mutate input index
-                else:
-                    new_input_index = self.get_random_input_index(column = node.column
-                        ,value_to_avoid = node.inputs[int_mutation])
-                    node.inputs[int_mutation] = new_input_index
+                node = mutate_node(node)
                 
                 #assign the new node:
                 new_graph.genotype[node.output_index] = node
         
-        new_graph.find_actives()
+        if altered_active_genotype:
+            new_graph.find_actives()
 
         return new_graph, altered_active_genotype
 
+    def single_active_mutation(self, graph, percentage):
+        """
+        Inputs
+        - graph (CGP_Graph instance)
+        - percentage (float)
+        Returns
+        - (CGP_Graph instance) The mutated graph
+        """
+
+        #Create a copy of the original graph, to change it later
+        new_graph = graph.copy()
+
+        #Node selection
+        nodes_list = list(new_graph.genotype.values())
+        rd.shuffle(nodes_list)
+        for node in nodes_list:
+
+            #Mutate and replace in the graph
+            mutated_node = mutate_node(node)
+            new_graph.genotype[node.output_index] = mutated_node
+            if node.active:
+                break
+        
+        #Update active labels in the graph
+        new_graph.find_actives()
+
+        return new_graph
+
+    def accummulating_mutation(self, graph, percentage):
+        altered = False
+        mutations = 0
+        while not altered:
+            prev_graph = graph
+            graph, altered = point_mutation(graph, percentage)
+            mutations += 1
+        return graph, prev_graph
+        
     def probabilistic_mutation(self, graph, probability):
         pass
 
@@ -778,6 +841,7 @@ class CGP_Node:
             ,output_index = self.output_index
             ,column = self.column
             ,input_dict = {k:v for k,v in self.inputs.items()})
+        the_copy.active = self.active
         return the_copy
 
     def get_string(self):
@@ -836,6 +900,10 @@ class CGP_Graph:
         self.active_genotype is the active sample of self.genotype
         """
         to_evaluate = defaultdict(lambda:False)
+
+        #Initialize all nodes as inactive
+        for node in self.genotype.values():
+            node.active = False
 
         for p in range(self.n_outputs):
             to_evaluate[self.output_gene[p]] = True
