@@ -17,6 +17,7 @@ import csv
 import pickle
 import statistics as stat
 import math
+import pandas as pd
 
 
 #############################################
@@ -166,7 +167,7 @@ def semantic_distance(ind1, ind2):
     Returns
     - (float) Average of absolute difference in semantics
     """
-    return sum([abs(v-ind2.semantics_all[k]) for k,v in ind1.semantics_all.items()]) / len(ind1.semantics_all)
+    return sum([abs(ind1.semantics_all[k]-ind2.semantics_all[k]) for k in ind1.semantics_all.keys()]) / len(ind1.semantics_all)
 
 
 
@@ -552,6 +553,70 @@ def get_cgp_log(population, representation, current_gen):
     
     return header, logs, gen_header, gen_row
 
+def individual_log(ind, representation, current_gen):
+    """
+    Inputs
+    - ind (Individual instance)
+    Returns
+    - (list of lists of strings) log
+    - (list of strings) header
+    """
+    f_idxs = [i for i in range(representation.n_functions)]
+    eval_names = ind.evaluations.keys()
+    header = ["Index"
+            ,"Generation"
+            ,"Age"
+            ,"Graph_n_inputs"
+            ,"Graph_n_outputs"
+            ,"Graph_max_lenght"
+            ,"Graph_actives"
+            ,"Active_rate"
+            ,"Ind_eval_skip"
+            #,"Semantics"
+            ]
+    header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
+    header += ["i"+str(i)+"_count" for i in range(representation.n_inputs)]
+    header += [name for name in eval_names]
+
+    graph = ind.representation
+    graph_actives = len(graph.active_genotype)
+
+    #Ind_eval_skip
+    if graph.evaluation_skipped:
+        evaluation_skipped =  1
+    else: 
+        evaluation_skipped =  0
+
+    #Node level data
+    funcs_count = [0 for _ in f_idxs]
+    used_inputs_count = [0 for _ in range(graph.n_inputs)]
+    for node in graph.active_genotype.values():
+        funcs_count[node.function_index] += 1
+        for input_idx in node.inputs.values():
+            if input_idx < graph.n_inputs:
+                used_inputs_count[input_idx] += 1
+    evals = [ind.evaluations[name] for name in eval_names]
+    total_funcs_count = [total_funcs_count[i] + funcs_count[i] for i in f_idxs]
+    total_used_inputs_count = [total_used_inputs_count[i] + used_inputs_count[i] for i in range(graph.n_inputs)]
+
+    #Individual level logs
+    ind_row = [current_gen
+        ,current_gen
+        ,current_gen - ind.created_in_gen
+        ,graph.n_inputs
+        ,graph.n_outputs
+        ,graph.max_lenght
+        ,graph_actives
+        ,graph_actives/graph.max_lenght
+        ,evaluation_skipped
+        #,ind.semantics_all.items()
+        ]
+    ind_row += funcs_count
+    ind_row += used_inputs_count
+    ind_row += evals
+    
+    return ind_row, header
+
 #############################################
 # Cartessian Genetic Programming ############
 #############################################
@@ -751,11 +816,12 @@ class CGP_Representation(Representation):
 
             #mutation will affect a node:    
             else:
-                #node = rd.choice(nodes_list)
-                node = nodes_list[mutate_output_index]
+                node = rd.choice(nodes_list)
+                #print(str(int_to_mutate), str(len(nodes_list)))
+                #node = nodes_list[int_to_mutate]
                 if graph.genotype[node.output_index].active:
                     altered_active_genotype = True
-                node = mutate_node(node)
+                node = self.mutate_node(node)
                 
                 #assign the new node:
                 new_graph.genotype[node.output_index] = node
@@ -765,11 +831,10 @@ class CGP_Representation(Representation):
 
         return new_graph, altered_active_genotype
 
-    def single_active_mutation(self, graph, percentage):
+    def single_active_mutation(self, graph):
         """
         Inputs
         - graph (CGP_Graph instance)
-        - percentage (float)
         Returns
         - (CGP_Graph instance) The mutated graph
         """
@@ -778,15 +843,21 @@ class CGP_Representation(Representation):
         new_graph = graph.copy()
 
         #Node selection
-        nodes_list = list(new_graph.genotype.values())
-        rd.shuffle(nodes_list)
-        for node in nodes_list:
+        len(graph.genotype) 
+        options = list(new_graph.genotype.values()) + [i for i,_ in enumerate(graph.output_gene)]
+        rd.shuffle(options)
+
+        for opt in options:
 
             #Mutate and replace in the graph
-            mutated_node = mutate_node(node)
-            new_graph.genotype[node.output_index] = mutated_node
-            if node.active:
+            if isinstance(opt, int):
+                new_graph.output_gene[opt] = self.get_random_output_gene(value_to_avoid = graph.output_gene[opt])
                 break
+            else:
+                mutated_node = self.mutate_node(opt)
+                new_graph.genotype[opt.output_index] = mutated_node
+                if opt.active:
+                    break
         
         #Update active labels in the graph
         new_graph.find_actives()
@@ -798,9 +869,9 @@ class CGP_Representation(Representation):
         mutations = 0
         while not altered:
             prev_graph = graph
-            graph, altered = point_mutation(graph, percentage)
+            graph, altered = self.point_mutation(graph, percentage)
             mutations += 1
-        return graph, prev_graph
+        return graph, mutations
         
     def probabilistic_mutation(self, graph, probability):
         pass

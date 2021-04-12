@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import os
 from datetime import datetime
 from datetime import date
+import pandas as pd
+import statistics as stat
 
 ################################################################
 #### Vanilla CGP ###############################################
@@ -62,6 +64,7 @@ for i,ind in enumerate(population):
 
 #EXPERIMENT 1: 
 
+"""
 ## CGP params
 levels_back = 200
 n_rows = 1
@@ -135,9 +138,6 @@ param_logs = [["rd.seed" , seed]
 ut.logs_to_file(param_logs, "param_logs", output_path)
 
 def evaluate_ind(ind):
-    """
-    Evaluate the individual with acc0 and acc1
-    """
     outputs = {}
     for i,data_row in enumerate(dataset.x_train):
         output_dict = ind.representation.evaluate(data_row = data_row)
@@ -299,3 +299,136 @@ for exp_idx in range(trials):
     ut.logs_to_file(individual_level_logs, "Ind_logs", path)
     gen_level_logs.insert(0, g_header)
     ut.logs_to_file(gen_level_logs, "Gen_logs", path)
+"""
+
+
+################################################################
+#### Semantics ###############################################
+################################################################
+
+#Semantics experiment
+
+#Methods
+def evaluate_ind(ind, dataset, objective):
+    """
+    Evaluate the individual with acc0 and acc1
+    """
+    outputs = {}
+    for i,data_row in enumerate(dataset.x_train):
+        output_dict = ind.representation.evaluate(data_row = data_row)
+        #Extracting the 0th index output gene
+        output = output_dict[0]
+        #The raw output need to be transformed
+        #transformed_output = ut.custom_round(output)
+        mapped_output = ut.threshold_map(value = output,threshold = mapping_threshold, output_up = dataset.labels[1], output_down = dataset.labels[0])
+        outputs[i] = mapped_output
+    #Each objective has its own evaluation method
+    ind.update_semantics_all(semantics_all = outputs)
+    acc = ut.accuracy(y = dataset.y_train, y_output = outputs)
+    ind.update_evaluation(objective = acc_obj, value = acc)
+
+
+## Experiment parameters
+generations = 10000
+problem_name = "ion"
+#problem_names = ion, spect, yst_m3, yst_mit
+seed = 0
+rd.seed(seed)
+now = datetime.now()
+time_string = now.strftime('%Y_%m_%d-%H_%M_%S')
+mapping_threshold = 0
+output_path = os.path.join("outputs","semantic_distances","point",problem_name + "-" + time_string, "") #define
+output_path = ut.verify_path(output_path)
+
+#Initialize the logs
+sem_logs = pd.DataFrame()
+final_log = pd.DataFrame()
+
+#Loop
+for i in range(20):
+
+    ## CGP params
+    levels_back = 200 + i*20
+    n_rows = 1
+    n_columns = 200 + i*20
+    n_outputs = 1
+    allow_input_to_output = True
+    inputs_available_to_all_columns = True
+    functions = [op.add,op.sub,op.mul,ut.safe_divide_one]
+    functions_as_string = "[op.add,op.sub,op.mul,ut.safe_divide_one]"
+    mutation_percentage = 6
+
+    #Instantiation
+    acc_obj = ea.Objective(name="acc", to_max = True, best=1, worst=0, eval_function = ut.accuracy)
+    tpr_obj = ea.Objective(name="tpr", to_max = True, best=1, worst=0, eval_function = ut.accuracy_in_label)
+    tnr_obj = ea.Objective(name="tnr", to_max = True, best=1, worst=0, eval_function = ut.accuracy_in_label)
+    dataset = pb.Dataset()
+    dataset.load_problem(name = problem_name)
+    data_rows = dataset.x_train.shape[0]
+    cgp = ea.CGP_Representation(
+                dataset.x_train.shape[1]
+                ,n_outputs
+                ,levels_back
+                ,n_rows 
+                ,n_columns
+                ,allow_input_to_output
+                ,inputs_available_to_all_columns
+                ,*functions)
+
+
+
+    #Initial random ind
+    graph = cgp.create_random(seed = rd.random())
+    ind = ea.Individual(graph, created_in_gen = 0)
+    evaluate_ind(ind, dataset, acc_obj)
+
+    start_time = time.time()
+    for gen in range(generations):
+
+        ##Generate the new ind
+        #new_graph = cgp.single_active_mutation(ind.representation)
+        #new_graph, muts = cgp.accummulating_mutation(ind.representation, 9)
+        new_graph, altered = cgp.point_mutation(ind.representation, mutation_percentage) #point
+        new_ind = ea.Individual(new_graph, created_in_gen = 0)
+        evaluate_ind(new_ind, dataset, acc_obj)
+
+        #Logs
+        row = {
+            "max_nodes":cgp.n_function_nodes
+            ,"prev_actives":len(ind.representation.active_genotype)
+            ,"new_actives":len(new_ind.representation.active_genotype)
+            ,"actives_change":len(new_ind.representation.active_genotype) - len(ind.representation.active_genotype)
+            ,"prev_actives_rate":len(ind.representation.active_genotype) / cgp.n_function_nodes
+            ,"new_actives_rate":len(new_ind.representation.active_genotype) / cgp.n_function_nodes
+            ,"actives_change_rate":(len(new_ind.representation.active_genotype) - len(ind.representation.active_genotype))/cgp.n_function_nodes
+            ,"semantic_distance":ea.semantic_distance(ind, new_ind)
+            ,"altered":altered
+            }
+        sem_logs = sem_logs.append(row, ignore_index = True)
+
+        #Reset variables for the loop to work
+        ind = new_ind
+
+    total_time = time.time() - start_time
+    avg_sd = stat.mean(list(sem_logs["semantic_distance"]))
+    altered_rate = sum(list(sem_logs["altered"]))/generations #point
+    f_l = {"avg_sd":avg_sd
+            ,"generations":generations
+            ,"total_time":total_time
+            ,"avg_gen_time":total_time/generations
+            ,"rd.seed":seed
+            ,"levels_back ":levels_back
+            ,"n_rows ":n_rows
+            ,"n_columns ":n_columns
+            ,"n_outputs ":n_outputs
+            ,"functions ":functions_as_string
+            ,"fitness_cases":len(dataset.y_train)
+            ,"mutation_percentage ": mutation_percentage #point
+            ,"altered_rate":altered_rate #point
+            }
+    final_log = final_log.append(f_l, ignore_index = True)
+    print(str(f_l))
+
+sem_logs.to_csv(os.path.join(output_path, "Sem_logs"))
+final_log.to_csv(os.path.join(output_path, "Exp_logs"))
+    
