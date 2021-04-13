@@ -160,6 +160,8 @@ def get_unique_inds_by_evals(population, objectives):
 
     return evals, counts
 
+#Semantics
+
 def semantic_distance(ind1, ind2):
     """
     Inputs
@@ -169,6 +171,11 @@ def semantic_distance(ind1, ind2):
     """
     return sum([abs(ind1.semantics_all[k]-ind2.semantics_all[k]) for k in ind1.semantics_all.keys()]) / len(ind1.semantics_all)
 
+def get_semantic_relevance_objective(name = "semantic_relevance"):
+    """
+    ss
+    """
+    pass
 
 
 #MOEA exclusive methods

@@ -329,8 +329,8 @@ def evaluate_ind(ind, dataset, objective):
 
 
 ## Experiment parameters
-generations = 10000
-problem_name = "ion"
+generations = 5000
+problem_name = "spect"
 #problem_names = ion, spect, yst_m3, yst_mit
 seed = 0
 rd.seed(seed)
@@ -345,18 +345,18 @@ sem_logs = pd.DataFrame()
 final_log = pd.DataFrame()
 
 #Loop
-for i in range(20):
+for i in range(4):
 
     ## CGP params
-    levels_back = 200 + i*20
+    levels_back = 200 + i*50
     n_rows = 1
-    n_columns = 200 + i*20
+    n_columns = 200 + i*50
     n_outputs = 1
     allow_input_to_output = True
     inputs_available_to_all_columns = True
     functions = [op.add,op.sub,op.mul,ut.safe_divide_one]
     functions_as_string = "[op.add,op.sub,op.mul,ut.safe_divide_one]"
-    mutation_percentage = 6
+    mutation_percentage = 9
 
     #Instantiation
     acc_obj = ea.Objective(name="acc", to_max = True, best=1, worst=0, eval_function = ut.accuracy)
@@ -375,8 +375,6 @@ for i in range(20):
                 ,inputs_available_to_all_columns
                 ,*functions)
 
-
-
     #Initial random ind
     graph = cgp.create_random(seed = rd.random())
     ind = ea.Individual(graph, created_in_gen = 0)
@@ -386,9 +384,10 @@ for i in range(20):
     for gen in range(generations):
 
         ##Generate the new ind
-        #new_graph = cgp.single_active_mutation(ind.representation)
+        new_graph = cgp.single_active_mutation(ind.representation)
+        altered = True
         #new_graph, muts = cgp.accummulating_mutation(ind.representation, 9)
-        new_graph, altered = cgp.point_mutation(ind.representation, mutation_percentage) #point
+        #new_graph, altered = cgp.point_mutation(ind.representation, mutation_percentage) #point
         new_ind = ea.Individual(new_graph, created_in_gen = 0)
         evaluate_ind(new_ind, dataset, acc_obj)
 
@@ -402,7 +401,7 @@ for i in range(20):
             ,"new_actives_rate":len(new_ind.representation.active_genotype) / cgp.n_function_nodes
             ,"actives_change_rate":(len(new_ind.representation.active_genotype) - len(ind.representation.active_genotype))/cgp.n_function_nodes
             ,"semantic_distance":ea.semantic_distance(ind, new_ind)
-            ,"altered":altered
+            ,"altered":altered #point
             }
         sem_logs = sem_logs.append(row, ignore_index = True)
 
@@ -410,9 +409,25 @@ for i in range(20):
         ind = new_ind
 
     total_time = time.time() - start_time
-    avg_sd = stat.mean(list(sem_logs["semantic_distance"]))
-    altered_rate = sum(list(sem_logs["altered"]))/generations #point
+
+    #Extract the subsets from the logs
+    current_logs = sem_logs[sem_logs["max_nodes"]==cgp.n_function_nodes]
+    sd_when_altered = list(current_logs.loc[current_logs["altered"]==True,"semantic_distance"]) #point
+
+    #Calculations
+    avg_sd = stat.mean(list(current_logs["semantic_distance"]))
+    stdev_sd = stat.stdev(list(current_logs["semantic_distance"]))
+    avg_actives = stat.mean(list(current_logs["prev_actives"]))
+    altered_rate = sum(list(current_logs["altered"]))/generations
+    if len(sd_when_altered) > 0:
+        avg_sd_when_altered = stat.mean(sd_when_altered)
+        stdev_sd_when_altered = stat.stdev(sd_when_altered)
+    else:
+        avg_sd_when_altered = 0
+        stdev_sd_when_altered = 0
     f_l = {"avg_sd":avg_sd
+            ,"stdev_sd":stdev_sd
+            ,"avg_actives":avg_actives
             ,"generations":generations
             ,"total_time":total_time
             ,"avg_gen_time":total_time/generations
@@ -421,14 +436,16 @@ for i in range(20):
             ,"n_rows ":n_rows
             ,"n_columns ":n_columns
             ,"n_outputs ":n_outputs
+            ,"n_inputs":cgp.n_inputs
             ,"functions ":functions_as_string
             ,"fitness_cases":len(dataset.y_train)
-            ,"mutation_percentage ": mutation_percentage #point
-            ,"altered_rate":altered_rate #point
+            ,"mutation_percentage ": mutation_percentage
+            ,"altered_rate":altered_rate
+            ,"avg_sd_when_altered":avg_sd_when_altered
+            ,"stdev_sd_when_altered":stdev_sd_when_altered
             }
     final_log = final_log.append(f_l, ignore_index = True)
     print(str(f_l))
 
 sem_logs.to_csv(os.path.join(output_path, "Sem_logs"))
 final_log.to_csv(os.path.join(output_path, "Exp_logs"))
-    
