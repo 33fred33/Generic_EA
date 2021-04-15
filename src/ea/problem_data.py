@@ -14,7 +14,19 @@ class Dataset:
         self.y_test = y_test
         self.labels = None
 
-    def load_problem(self,name, test_train_rate=0.5, keep_labels_ratio = True, seed = None):
+    def even_parity(self):
+        """
+        Returns even parity output
+        """
+        y = []
+        for row in self.x_train:
+            if sum(row) % 2 == 0: 
+                y.append(1)
+            else:
+                y.append(0)
+        self.y_train = np.array(y)
+
+    def load_problem(self,name):
         """
         Available names: ion, spect
         """
@@ -62,6 +74,24 @@ class Dataset:
             self.y_train = np.array([v.decode('UTF-8') for v in self.y_train])
             self.y_train = np.array([1 if v=="MIT" else 0 for v in self.y_train])
          
+        elif name[:11] == "even_parity":
+            num = int(name[11:])
+            data = []
+            lim = 2**num
+            for i,col in enumerate(range(int(num))):
+                sw = 2**i
+                row = []
+                val = 0
+                for j in range(lim):
+                    if j%sw == 0 and j!=0:
+                        if val==0:
+                            val=1
+                        else: 
+                            val=0
+                    row.append(val)
+                data.insert(0,row)
+            self.x_train = np.array(data).T
+            self.even_parity()
 
         else:
             print("Unknown problem name")
@@ -70,6 +100,6 @@ class Dataset:
 
         self.labels = list(set(self.y_train))
 
-        if keep_labels_ratio:
-            pass
+    def split_data(self, train_rate = 0.5, keep_labels_ratio = True, seed = None):
+        pass
         

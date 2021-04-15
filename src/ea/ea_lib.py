@@ -161,22 +161,55 @@ def get_unique_inds_by_evals(population, objectives):
     return evals, counts
 
 #Semantics
-
-def semantic_distance(ind1, ind2):
+def semantic_distance(ind1, ind2, semantic_indexes):
     """
     Inputs
     - ind1, ind2 (Individual instances)
+    - semantic_indexes (list of ints)
     Returns
     - (float) Average of absolute difference in semantics
     """
-    return sum([abs(ind1.semantics_all[k]-ind2.semantics_all[k]) for k in ind1.semantics_all.keys()]) / len(ind1.semantics_all)
+    return sum([abs(ind1.semantics_all[k]-ind2.semantics_all[k]) for k in semantic_indexes]) / len(semantic_indexes)
 
-def get_semantic_relevance_objective(name = "semantic_relevance"):
+def get_semantic_peculiarity_objective(name = "semantic_peculiarity"):
     """
-    ss
+    Inputs:
+    - name (string): name of the objective
+    Returns:
+    - (Objective instance) name = name
     """
-    pass
+    obj = Objective(name=name, to_max = True, best=1, worst=0)
+    return obj
 
+def semantic_peculiarity(population, output_vector, semantic_indexes, sp_objective, b=math.sqrt(2)):
+    """
+    Updates the semantic peculiarity in every individual as one of
+    their evaluations, with key = sp_objective.name
+    Inputs:
+    - population (list of Individual instances)
+    - output_vector (list of labels) the full set of outputs of the fitness cases
+    - semantic_indexes (list of ints): list of indexes that define the semantic set
+    - sp_objective (Objective instance)
+    Returns: 
+    - (dict with fitness_case_index:semantic_relevance)
+    """
+    s = len(semantic_indexes)
+    n = len(population)
+    represented_fs = defaultdict(lambda:[])
+    r = {}
+    p = {}
+    for f in semantic_indexes:
+        c = 0
+        for ind_idx, ind in enumerate(population):
+            if output_vector[f]==ind.semantics_all[f]:
+                represented_fs[ind_idx].append(f)
+                c += 1
+        r[f] = (1 - (c/n))**b
+    for ind_idx, ind in enumerate(population):
+        semantic_peculiarity = sum([r[f] for f in represented_fs[ind_idx]])/s
+        ind.evaluations[sp_objective.name] = semantic_peculiarity
+        p[ind_idx] = semantic_peculiarity
+    return p, r, represented_fs
 
 #MOEA exclusive methods
 def _dominates(p, q, objectives):
@@ -635,9 +668,10 @@ class CGP_Representation(Representation):
             ,levels_back
             ,n_rows
             ,n_columns
+            ,functions
             ,allow_input_to_output = False
             ,inputs_available_to_all_columns = False
-            ,*functions):
+            ):
         """
         The outputs are generated as the last indexes in the graph
         """
