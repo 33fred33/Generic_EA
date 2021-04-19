@@ -101,5 +101,31 @@ class Dataset:
         self.labels = list(set(self.y_train))
 
     def split_data(self, train_rate = 0.5, keep_labels_ratio = True, seed = None):
-        pass
-        
+        """
+        Splits into training and testing
+        Shuffles the data
+        Inputs:
+        Updates: x_train, x_test, y_train, y_test
+        """
+        if seed is not None:
+            rd.seed(seed)
+        if keep_labels_ratio:
+            new_xtn = []
+            new_ytn = []
+            new_xtt = []
+            new_ytt = []
+            for label in self.labels:
+                temp_x = [x for i,x in enumerate(self.x_train) if self.y_train[i]==label]
+                temp_y = [y for i,y in enumerate(self.y_train) if self.y_train[i]==label]
+                temp_zip = list(zip(temp_x, temp_y))
+                rd.shuffle(temp_zip)
+                temp_x, temp_y = zip(*temp_zip)
+                train_size = int(len(temp_x)*train_rate)
+                new_xtn += temp_x[:train_size]
+                new_xtt += temp_x[train_size:]
+                new_ytn += temp_y[:train_size]
+                new_ytt += temp_y[train_size:]
+            self.x_train = np.array(new_xtn)
+            self.x_test = np.array(new_xtt)
+            self.y_train = np.array(new_ytn)
+            self.y_test = np.array(new_ytt)
