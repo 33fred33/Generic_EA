@@ -27,7 +27,8 @@ import pandas as pd
 class Individual:
     def __init__(self
             ,representation
-            ,created_in_gen):
+            ,created_in_gen
+            ,parent_index = None):
         """
         Inputs
         - representation: (instance from class) asssigned individual characteristics
@@ -37,6 +38,7 @@ class Individual:
         self.semantics_all = {} 
         self.evaluations = {}
         self.created_in_gen = created_in_gen
+        self.parent_index = parent_index
 
     def update_evaluation(self,objective,value):
         self.evaluations[objective.name] = value
@@ -67,6 +69,7 @@ class Objective:
         self.best = best
         self.worst = worst
         self.eval_function = eval_function
+
 
 def sort_population(population, objectives):
     """
@@ -411,9 +414,7 @@ def set_crowding_distances_by_front(population
         front += 1
         pop_set = [ind for ind in population if ind.evaluations[front_objective.name] == front]
 
-def fast_nondominated_sort(population
-        ,conflicting_objectives
-        ,nsgaii_objectives):
+def fast_nondominated_sort(population, conflicting_objectives, nsgaii_objectives):
     """
     Population sorting method proposed in the NSGA-II paper
     The objectives must be conflicting

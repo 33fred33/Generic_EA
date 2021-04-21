@@ -1,18 +1,21 @@
 import numpy as np
 import os
 import random as rd
+from sklearn.model_selection import train_test_split
 
 class Dataset:
     def __init__(self
-            ,x_train = None
-            ,x_test = None
-            ,y_train = None
-            ,y_test = None):
-        self.x_train = x_train
-        self.x_test = x_test
-        self.y_train = y_train
-        self.y_test = y_test
-        self.labels = None
+            ,x_train = []
+            ,x_test = []
+            ,y_train = []
+            ,y_test = []):
+        self.x_train = np.array(x_train)
+        self.x_test = np.array(x_test)
+        self.y_train = np.array(y_train)
+        self.y_test = np.array(y_test)
+        self.labels = []
+        self.train_label_count={}
+        self.test_label_count={}
 
     def even_parity(self):
         """
@@ -95,10 +98,23 @@ class Dataset:
 
         else:
             print("Unknown problem name")
-
-
-
+        self._update_details()
+        
+    def _update_details(self):
         self.labels = list(set(self.y_train))
+        self.train_label_count = {label:0 for label in self.labels}
+        self.test_label_count = {label:0 for label in self.labels}
+        for train_label in self.y_train:
+            self.train_label_count[train_label] += 1
+        if len(self.y_test) > 0:
+            for test_label in self.y_test:
+                self.test_label_count[test_label] += 1
+
+    def print_dataset_details(self):
+        print("train_shape", str(self.x_train.shape))
+        print("test_shape", str(self.x_test.shape))
+        print("train_label_count", self.train_label_count)
+        print("test_label_count", self.test_label_count)
 
     def split_data(self, train_rate = 0.5, keep_labels_ratio = True, seed = None):
         """
@@ -106,6 +122,9 @@ class Dataset:
         Shuffles the data
         Inputs:
         Updates: x_train, x_test, y_train, y_test
+        """
+        self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(self.x_train, self.y_train, test_size = train_rate, random_state=seed, stratify=self.y_train, shuffle = True)
+        self._update_details()
         """
         if seed is not None:
             rd.seed(seed)
@@ -129,3 +148,4 @@ class Dataset:
             self.x_test = np.array(new_xtt)
             self.y_train = np.array(new_ytn)
             self.y_test = np.array(new_ytt)
+        """
