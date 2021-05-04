@@ -5,7 +5,7 @@ from datetime import datetime
 ####################################
 
 
-trials = 1
+trials = 20
 random_seed = 0
 dataset_name = "ion"
     #Options: ion, spect, yst_m3, yst_mit, even_parity
@@ -22,7 +22,7 @@ semantic_peculiarity_b = 1
 
 n_outputs = 1
 n_rows = 1
-n_columns = 100
+n_columns = 200
 levels_back = n_columns
 allow_input_to_output = True
 inputs_available_to_all_columns = True
@@ -42,7 +42,7 @@ cgp_operator = "point"
 ####################################
 
 population_size = 200
-tournament_size = 6
+tournament_size = 7
 moea_sorting_method = "NSGAII"
     #Options: NSGAII, SPEA2, NSGAII_SP
 stopping_criteria = "fitness_evaluations"
