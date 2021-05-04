@@ -615,14 +615,12 @@ for trial in range(prm.trials):
         sorted_population = sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp_obj)
 
         #Individual_logs
-        ea.plot_pareto(sorted_population, objectives, cluster_type = "size")
         hyperarea = ea.hyperarea(sorted_population, objectives, front_objective)
         header, logs, g_header, g_logs = ea.get_cgp_log(sorted_population, cgp, current_gen)
         g_logs += [hyperarea]
         g_header += ["Hyperarea"]
         individual_level_logs += logs
         gen_level_logs += [g_logs]
-        ea.plot_pareto(sorted_population, objectives, cluster_type = "size")
         if current_gen%10==0:
             ea.plot_pareto(sorted_population, objectives, "size", path = path, name = "plt_size_g"+str(current_gen))
             ea.plot_pareto(sorted_population, objectives, "color", path = path, name = "plt_color_g"+str(current_gen))

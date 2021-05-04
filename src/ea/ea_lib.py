@@ -251,33 +251,7 @@ def objective_space_euclidean_distance(ind1, ind2, objectives):
         pd = math.sqrt(pd**2 + d**2)
     return pd
 
-def get_pareto_front_individuals(population, objectives):
-    """
-    Inputs
-    population: (list of Individual instances) Individuals part of the pareto set
-    objectives: (list of Objective instances) 
-    Returns
-    (list of Individual instances) Only non-dominated individuals
-    """
-    #initialisation
-    front = []
-
-    #front 1
-    for p in population:
-        #p.dominated_solutions = []
-        p.domination_counter = 0
-        for q in population:
-            #if _dominates(p,q, objectives):
-                #p.dominated_solutions.append(q)
-            if _dominates(q,p, objectives):
-                p.domination_counter = p.domination_counter + 1
-        if p.domination_counter == 0:
-            #p.evaluations[front_objective.name] = 1
-            front.append(p)
-
-    return front
-
-def hyperarea(population, objectives):
+def hyperarea(population, objectives, front_objective):
     """
     Inputs
     population: (list of Individual instances) Individuals part of the pareto set
@@ -293,7 +267,8 @@ def hyperarea(population, objectives):
     hyperarea = 0
 
     #Filter population to get pareto front only and sort
-    front_pop = get_pareto_front_individuals(population, objectives)
+    set_ranks(population, objectives, front_objective)
+    front_pop = [i for i in population if i.evaluations[front_objective.name]==1]
     sorted_pop = sort_population(front_pop, [obj0])
 
     #Iteration
