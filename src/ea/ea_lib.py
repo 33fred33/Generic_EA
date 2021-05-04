@@ -28,7 +28,8 @@ class Individual:
     def __init__(self
             ,representation
             ,created_in_gen
-            ,parent_index = None):
+            ,parent_index = None
+            ,parent = None):
         """
         Inputs
         - representation: (instance from class) asssigned individual characteristics
@@ -39,6 +40,14 @@ class Individual:
         self.evaluations = {}
         self.created_in_gen = created_in_gen
         self.parent_index = parent_index
+        self.parent = parent
+
+        #For logs
+        self.semantic_distance_from_parent = None
+        self.damaged_semantics_from_parent = None
+        self.improved_semantics_from_parent = None
+        self.semantic_change_balance = None
+        self.active_nodes_diff_from_parent = None
 
     def update_evaluation(self,objective,value):
         self.evaluations[objective.name] = value
@@ -250,18 +259,23 @@ def get_pareto_front_individuals(population, objectives):
     Returns
     (list of Individual instances) Only non-dominated individuals
     """
-    front_population = []
-    for idx_p, p in enumerate(population):
-        add = True
-        for idx_q, q in enumerate(population):
-            if idx_p != idx_q:
-                if _dominates(q, p, objectives):
-                    add = False
-                    break
-        if add:
-            front_population.append(p)
+    #initialisation
+    front = []
 
-    return front_population
+    #front 1
+    for p in population:
+        #p.dominated_solutions = []
+        p.domination_counter = 0
+        for q in population:
+            #if _dominates(p,q, objectives):
+                #p.dominated_solutions.append(q)
+            if _dominates(q,p, objectives):
+                p.domination_counter = p.domination_counter + 1
+        if p.domination_counter == 0:
+            #p.evaluations[front_objective.name] = 1
+            front.append(p)
+
+    return front
 
 def hyperarea(population, objectives):
     """
@@ -508,6 +522,11 @@ def get_cgp_log(population, representation, current_gen):
     total_funcs_count = [0 for _ in f_idxs]
     total_used_inputs_count = [0 for _ in range(model.representation.n_inputs)]
     total_evals = [0 for _ in range(n_evals)]
+    list_semantic_distance_from_parent = []
+    list_damaged_semantics_from_parent = []
+    list_improved_semantics_from_parent = []
+    list_semantic_change_balance = []
+    list_active_nodes_diff_from_parent = []
 
     #Define the header
     header = ["Index"
@@ -517,17 +536,33 @@ def get_cgp_log(population, representation, current_gen):
             ,"Graph_n_outputs"
             ,"Graph_max_lenght"
             ,"Graph_actives"
-            ,"Ind_eval_skip"]
+            ,"Ind_eval_skip"
+            ,"Semantic_distance_from_parent"
+            ,"Damaged_semantics_from_parent"
+            ,"Improved_semantics_from_parent"
+            ,"Semantic_change_balance"
+            ,"Active_nodes_diff_from_parent"]
     header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
     header += ["i"+str(i)+"_count" for i in range(representation.n_inputs)]
     header += [name for name in eval_names]
+    header += ["parent_"+name for name in eval_names]
 
     gen_header = ["Gen"
                 ,"Eval_nodes"
                 ,"Avg_age"
                 ,"Avg_active_nodes"
                 ,"Eval_skips"
-                ,"Eval_skips_ptg"]
+                ,"Eval_skips_ptg"
+                ,"Avg_semantic_distance_from_parent"
+                ,"Std_semantic_distance_from_parent"
+                ,"Avg_damaged_semantics_from_parent"
+                ,"Std_damaged_semantics_from_parent"
+                ,"Avg_improved_semantics_from_parent"
+                ,"Std_improved_semantics_from_parent"
+                ,"Avg_semantic_change_balance"
+                ,"Std_semantic_change_balance"
+                ,"Avg_active_nodes_diff_from_parent"
+                ,"Std_active_nodes_diff_from_parent"]
     gen_header += ["f"+str(f_idx)+"_presence" for f_idx in f_idxs]
     gen_header += ["i"+str(i)+"_presence" for i in range(representation.n_inputs)]
     gen_header += ["Avg_" + name for name in eval_names]
@@ -539,7 +574,11 @@ def get_cgp_log(population, representation, current_gen):
         #Gathered data for gen_logs
         total_age += current_gen - ind.created_in_gen
         total_actives += graph_actives
-
+        list_semantic_distance_from_parent.append(ind.semantic_distance_from_parent)
+        list_damaged_semantics_from_parent.append(ind.damaged_semantics_from_parent)
+        list_improved_semantics_from_parent.append(ind.improved_semantics_from_parent)
+        list_semantic_change_balance.append(ind.semantic_change_balance)
+        list_active_nodes_diff_from_parent.append(ind.active_nodes_diff_from_parent)
 
         #Ind_eval_skip
         if graph.evaluation_skipped:
@@ -559,6 +598,10 @@ def get_cgp_log(population, representation, current_gen):
                 if input_idx < graph.n_inputs:
                     used_inputs_count[input_idx] += 1
         evals = [ind.evaluations[name] for name in eval_names]
+        if ind.parent is not None:
+            parent_evals = [ind.parent.evaluations[name] for name in eval_names]
+        else:
+            parent_evals = [None for name in eval_names]
         total_evals = [total_evals[i] + evals[i] for i in range(n_evals)]
         total_funcs_count = [total_funcs_count[i] + funcs_count[i] for i in f_idxs]
         total_used_inputs_count = [total_used_inputs_count[i] + used_inputs_count[i] for i in range(graph.n_inputs)]
@@ -571,20 +614,41 @@ def get_cgp_log(population, representation, current_gen):
             ,graph.n_outputs
             ,graph.max_lenght
             ,graph_actives
-            ,evaluation_skipped]
+            ,evaluation_skipped
+            ,ind.semantic_distance_from_parent
+            ,ind.damaged_semantics_from_parent
+            ,ind.improved_semantics_from_parent
+            ,ind.semantic_change_balance
+            ,ind.active_nodes_diff_from_parent]
         ind_row += funcs_count
         ind_row += used_inputs_count
         ind_row += evals
+        ind_row += parent_evals
         logs.append(ind_row)
     
     #Generation level logs
-    
+    list_semantic_distance_from_parent = [x for x in list_semantic_distance_from_parent if x is not None]
+    list_damaged_semantics_from_parent = [x for x in list_damaged_semantics_from_parent if x is not None]
+    list_improved_semantics_from_parent = [x for x in list_improved_semantics_from_parent if x is not None]
+    list_semantic_change_balance = [x for x in list_semantic_change_balance if x is not None]
+    list_active_nodes_diff_from_parent = [x for x in list_active_nodes_diff_from_parent if x is not None]
     gen_row = [current_gen
             ,nodes_evaluated
             ,total_age/pop_size
             ,total_actives/pop_size
             ,total_skips
-            ,total_skips*100/pop_size]
+            ,total_skips*100/pop_size
+            ,stat.mean(list_semantic_distance_from_parent)
+            ,stat.stdev(list_semantic_distance_from_parent)
+            ,stat.mean(list_damaged_semantics_from_parent)
+            ,stat.stdev(list_damaged_semantics_from_parent)
+            ,stat.mean(list_improved_semantics_from_parent)
+            ,stat.stdev(list_improved_semantics_from_parent)
+            ,stat.mean(list_semantic_change_balance)
+            ,stat.stdev(list_semantic_change_balance)
+            ,stat.mean(list_active_nodes_diff_from_parent)
+            ,stat.stdev(list_active_nodes_diff_from_parent)
+            ]
     gen_row += [total_funcs_count[i]*100/sum(total_funcs_count) for i in f_idxs]
     gen_row += [total_used_inputs_count[i]*100/sum(total_used_inputs_count) for i in range(graph.n_inputs)]
     gen_row += [v/pop_size for v in total_evals]
@@ -613,6 +677,11 @@ def individual_log(ind, representation, current_gen):
             ,"Graph_actives"
             ,"Active_rate"
             ,"Ind_eval_skip"
+            ,"semantic_distance_from_parent"
+            ,"damaged_semantics_from_parent"
+            ,"improved_semantics_from_parent"
+            ,"semantic_change_balance"
+            ,"active_nodes_diff_from_parent"
             #,"Semantics"
             ]
     header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
@@ -650,6 +719,11 @@ def individual_log(ind, representation, current_gen):
         ,graph_actives
         ,graph_actives/graph.max_lenght
         ,evaluation_skipped
+        ,ind.semantic_distance_from_parent
+        ,ind.damaged_semantics_from_parent
+        ,ind.improved_semantics_from_parent
+        ,ind.semantic_change_balance
+        ,ind.active_nodes_diff_from_parent
         #,ind.semantics_all.items()
         ]
     ind_row += funcs_count
