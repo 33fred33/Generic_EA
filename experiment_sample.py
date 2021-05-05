@@ -13,8 +13,13 @@ import pandas as pd
 import statistics as stat
 import importlib
 import argparse
+import shutil
 
-prm = importlib.import_module('experiments.param_files.params')
+param_arg = 'experiments.param_files.params'
+prm = importlib.import_module(param_arg)
+temp_file = param_arg.split(".")
+temp_file[-1] += ".py"
+param_path = os.path.join(*temp_file)
 
 ################################################################
 #### Vanilla CGP ###############################################
@@ -457,15 +462,24 @@ final_log.to_csv(os.path.join(output_path, "Exp_logs"))
 
 individual_level_logs = []
 gen_level_logs = []
+temp_output_path = os.path.join(*prm.output_path)
+#temp_output_path = ut.verify_path(temp_output_path)
+#param_destination = os.path.join(temp_output_path)#, temp_file[-1])
+#shutil.copyfile(param_path, param_destination)
 
 #Methods
-def evaluate_ind(ind, semantic_indexes, dataset, objectives, current_gen, active_altered):
-    ind.update_evaluation(objective = generation_objective, value = current_gen)
+def evaluate_ind(ind, semantic_indexes, dataset, objectives, active_altered, test=False):
 
+    if test:
+        x = dataset.x_train
+        y = dataset.y_train
+    else:
+        x = dataset.x_test
+        y = dataset.y_test
     #Graph evaluated if active nodes or output nodes were altered:
     if active_altered:
         outputs = {}
-        for i,data_row in enumerate(dataset.x_train):
+        for i,data_row in enumerate(x):
             output_dict = ind.representation.evaluate(data_row = data_row)
             #Extracting the 0th index output gene (only one output gene)
             output = output_dict[0]
@@ -479,13 +493,12 @@ def evaluate_ind(ind, semantic_indexes, dataset, objectives, current_gen, active
         #Each objective has its own evaluation method
         for obj_idx, obj_name in enumerate(prm.objective_names):
             if obj_name == "accuracy_in_label":
-                val = ut.accuracy_in_label(y = dataset.y_train, y_output = outputs, label = dataset.labels[prm.accuracy_label_index[obj_idx]])
+                val = ut.accuracy_in_label(y = y, y_output = outputs, label = dataset.labels[prm.accuracy_label_index[obj_idx]])
             elif obj_name == "accuracy":
-                val = ut.accuracy(y = dataset.y_train, y_output = outputs)
+                val = ut.accuracy(y = y, y_output = outputs)
             elif obj_name == "active_nodes":
                 val = len(ind.representation.active_genotype)
             ind.update_evaluation(objective = objectives[obj_idx], value = val)
-        ind.update_evaluation(objective = generation_objective, value = current_gen)
     
         #Update individual values
         ind.update_semantics_all(semantics_all = outputs)
@@ -497,12 +510,15 @@ def evaluate_ind(ind, semantic_indexes, dataset, objectives, current_gen, active
             ind.improved_semantics_from_parent = 0
             for y_idx in semantic_indexes:
                 if ind.semantics_all[y_idx] != ind.parent.semantics_all[y_idx]:
-                    if ind.semantics_all[y_idx] == dataset.y_train[y_idx]:
+                    if ind.semantics_all[y_idx] == y[y_idx]:
                         ind.improved_semantics_from_parent = ind.improved_semantics_from_parent + 1
-                    elif ind.parent.semantics_all[y_idx] == dataset.y_train[y_idx]:
+                    elif ind.parent.semantics_all[y_idx] == y[y_idx]:
                         ind.damaged_semantics_from_parent = ind.damaged_semantics_from_parent + 1
             ind.semantic_change_balance = ind.improved_semantics_from_parent - ind.damaged_semantics_from_parent
-            ind.active_nodes_diff_from_parent = abs(len(ind.representation.active_genotype) - len(ind.parent.representation.active_genotype))
+            ind.active_nodes_diff_from_parent = abs(len(ind.representation.active_genotype) - len(ind.parent.representation.active_genotype))/ind.representation.max_lenght
+            ind.damaged_semantics_from_parent = ind.damaged_semantics_from_parent/len(semantic_indexes)
+            ind.improved_semantics_from_parent = ind.improved_semantics_from_parent/len(semantic_indexes)
+            ind.semantic_change_balance = ind.semantic_change_balance/len(semantic_indexes)
 
     else:
         ind.representation.evaluation_skipped = True
@@ -528,7 +544,7 @@ def sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp
     return sorted_population
 
 
-def create_offspring(parent_population):
+def create_offspring(parent_population, current_gen):
 
     #Selection
     parent_index = ea.tournament_selection_index(population_size = len(parent_population), tournament_size = prm.tournament_size)
@@ -548,9 +564,10 @@ def create_offspring(parent_population):
                             ,created_in_gen = current_gen
                             ,parent_index = parent_index
                             ,parent = parent)
+    offspring.update_evaluation(objective = generation_objective, value = current_gen)
 
     #If the active graph was not altered, the individual does not need to be evaluated again:
-    evaluate_ind(offspring, semantic_indexes, dataset, objectives, current_gen, active_altered)
+    evaluate_ind(offspring, semantic_indexes, dataset, objectives, active_altered)
     return offspring
 
 
@@ -558,10 +575,10 @@ def create_offspring(parent_population):
 for trial in range(prm.trials):
 
     #Setup
-    current_gen = 0
-    output_path = os.path.join(*prm.output_path)
-    output_path = os.path.join(output_path, str(trial), "")
+    output_path = os.path.join(temp_output_path, str(trial), "")
     path = ut.verify_path(output_path)
+    #shutil.copyfile(param_path, path)
+    current_gen = 0
     dataset = pb.Dataset()
     dataset.load_problem(name = prm.dataset_name)
     dataset.split_data(train_rate = prm.train_test_rate)
@@ -602,9 +619,10 @@ for trial in range(prm.trials):
     graphs = [cgp.create_random(seed = rd.random()) for _ in range(prm.population_size)]
     parent_population = [ea.Individual(graphs[i], created_in_gen = 0) for i in range(prm.population_size)]
     for ind in parent_population:
-        evaluate_ind(ind, semantic_indexes, dataset, objectives, current_gen, True)
+        evaluate_ind(ind, semantic_indexes, dataset, objectives, True)
+        ind.update_evaluation(objective = generation_objective, value = current_gen)
     parent_population = sort_pop_moea(parent_population, objectives, nsgaii_objectives, spea2_objective, sp_obj)
-    offspring_population = [create_offspring(parent_population) for i in range(prm.population_size)]
+    offspring_population = [create_offspring(parent_population, current_gen) for i in range(prm.population_size)]
 
 
     ## Main loop
@@ -621,7 +639,7 @@ for trial in range(prm.trials):
         g_header += ["Hyperarea"]
         individual_level_logs += logs
         gen_level_logs += [g_logs]
-        if current_gen%10==0:
+        if (current_gen+1)%10==0:
             ea.plot_pareto(sorted_population, objectives, "size", path = path, name = "plt_size_g"+str(current_gen))
             ea.plot_pareto(sorted_population, objectives, "color", path = path, name = "plt_color_g"+str(current_gen))
             ut.logs_to_file(individual_level_logs, "Ind_logs", path)
@@ -636,7 +654,7 @@ for trial in range(prm.trials):
         #Offspring generation
         previous_population = [i for i in sorted_population] #debugging purposes
         parent_population = sorted_population[:prm.population_size]
-        offspring_population = [create_offspring(parent_population) for i in range(prm.population_size)]
+        offspring_population = [create_offspring(parent_population, current_gen) for i in range(prm.population_size)]
 
         current_gen = current_gen + 1
 
@@ -645,3 +663,23 @@ for trial in range(prm.trials):
     ut.logs_to_file(individual_level_logs, "Ind_logs", path)
     gen_level_logs.insert(0, g_header)
     ut.logs_to_file(gen_level_logs, "Gen_logs", path)
+
+    #Test evaluation
+    population = parent_population + offspring_population
+    for ind in population:
+        evaluate_ind(ind, semantic_indexes, dataset, objectives, True, True)
+    population = sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp_obj)
+
+    #Logs
+    test_g_logs = []
+    hyperarea = ea.hyperarea(population, objectives, front_objective)
+    header, logs, g_header, g_logs = ea.get_cgp_log(population, cgp, current_gen)
+    g_logs+= [hyperarea]
+    g_header += ["Hyperarea"]
+    test_g_logs += [g_logs]
+    ea.plot_pareto(population, objectives, "size", path = path, name = "plt_size_test")
+    ea.plot_pareto(population, objectives, "color", path = path, name = "plt_color_test")
+    logs.insert(0, header)
+    ut.logs_to_file(logs, "Test_ind_logs", path)
+    test_g_logs.insert(0, g_header)
+    ut.logs_to_file(test_g_logs, "Test_gen_logs", path)
