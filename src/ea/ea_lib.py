@@ -516,7 +516,8 @@ def get_cgp_log(population, representation, current_gen):
             ,"Damaged_semantics_from_parent"
             ,"Improved_semantics_from_parent"
             ,"Semantic_change_balance"
-            ,"Active_nodes_diff_from_parent"]
+            ,"Active_nodes_diff_from_parent"
+            ,"Graph"]
     header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
     header += ["i"+str(i)+"_count" for i in range(representation.n_inputs)]
     header += [name for name in eval_names]
@@ -594,7 +595,8 @@ def get_cgp_log(population, representation, current_gen):
             ,ind.damaged_semantics_from_parent
             ,ind.improved_semantics_from_parent
             ,ind.semantic_change_balance
-            ,ind.active_nodes_diff_from_parent]
+            ,ind.active_nodes_diff_from_parent
+            ,str(ind.representation)]
         ind_row += funcs_count
         ind_row += used_inputs_count
         ind_row += evals

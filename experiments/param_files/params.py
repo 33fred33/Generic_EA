@@ -33,7 +33,7 @@ point_mutation_percentage = 6
 numeric_output_mapping_threshold = 0.5
 label_index_above_threshold = 1
 label_index_below_threshold = 0
-cgp_operator = "sam"
+cgp_operator = "accum"
     #Options: point, sam, accum,
 
 
@@ -43,9 +43,9 @@ cgp_operator = "sam"
 
 population_size = 200
 tournament_size = 7
-moea_sorting_method = "SPEA2"
+moea_sorting_method = "NSGAII"
     #Options: NSGAII, SPEA2, NSGAII_SP
-stopping_criteria = "fitness_evaluations"
+stopping_criteria = "generations"
     #Options: fitness_evaluations, node_evaluations, generations 
 generations = 100
 node_max_evals = 100000000
