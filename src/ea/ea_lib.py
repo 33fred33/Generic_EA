@@ -193,6 +193,12 @@ def get_semantic_peculiarity_objective(name = "semantic_peculiarity"):
     obj = Objective(name=name, to_max = True, best=1, worst=0)
     return obj
 
+def set_semantic_peculiarity_by_front(population
+        ,conflicting_objectives
+        ,front_objective
+        ,cd_objective):
+    pass
+
 def semantic_peculiarity(population, output_vector, semantic_indexes, sp_objective, b=math.sqrt(2)):
     """
     Updates the semantic peculiarity in every individual as one of

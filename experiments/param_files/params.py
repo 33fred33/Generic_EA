@@ -14,7 +14,7 @@ train_test_rate = 0.5
 semantic_size_rate = 1
     #Domain: in [0,1]
 semantic_keep_label_rate = True
-semantic_peculiarity_b = 1
+semantic_peculiarity_b = 3
 
 ####################################
 # CGP ##############################
@@ -43,7 +43,7 @@ cgp_operator = "accum"
 
 population_size = 200
 tournament_size = 7
-moea_sorting_method = "NSGAII"
+moea_sorting_method = "SPEA2"
     #Options: NSGAII, SPEA2, NSGAII_SP
 stopping_criteria = "generations"
     #Options: fitness_evaluations, node_evaluations, generations 
@@ -70,7 +70,7 @@ accuracy_label_index = [0,1]
 # Logs #############################
 ####################################
 
-experiment_name = dataset_name + "_" + cgp_operator + "_" + moea_sorting_method
+experiment_name = dataset_name + "_" + cgp_operator + str(point_mutation_percentage) + "_" + moea_sorting_method
 timestamp_format = ("%Y_%m_%d-%H_%M_%S")
 now = datetime.now()
 time_string = now.strftime(timestamp_format)
