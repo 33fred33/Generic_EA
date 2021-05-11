@@ -667,7 +667,7 @@ for trial in range(prm.trials):
         population = parent_population + offspring_population
         sorted_population = sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp_obj)
 
-        #Individual_logs
+        #Logs
         hyperarea = ea.hyperarea(sorted_population, objectives, front_objective)
         header, logs, g_header, g_logs = ea.get_cgp_log(sorted_population, cgp, current_gen)
         front_pop = [i for i in sorted_population if i.evaluations[front_objective.name]==1]
@@ -690,31 +690,27 @@ for trial in range(prm.trials):
             previous_hyperarea = hyperarea
 
         #Offspring generation
-        previous_population = [i for i in sorted_population] #debugging purposes
         parent_population = sorted_population[:prm.population_size]
-        offspring_population = [create_offspring(parent_population, current_gen) for i in range(prm.population_size)]
-
-        #stop_criteria:
-        #nodes_idx = g_header.index("Eval_nodes")
-        #nodes_evaluated += g_logs[nodes_idx] * data_rows
-        #print("progress: ", str(nodes_evaluated*100/node_max_evals), " nodes_evaluated: ", str(nodes_evaluated))
-        #if nodes_evaluated > node_max_evals:
-        #    break
 
         current_gen = current_gen + 1
+        offspring_population = [create_offspring(parent_population, current_gen) for i in range(prm.population_size)]
 
         #Stop criteria fitness_evaluations, node_evaluations, generations 
         if prm.stopping_criteria == "generations":
-            if current_gen > prm.stop_value:
+            stop_criteria_value = current_gen
+            print(prm.stopping_criteria, ": ", str(stop_criteria_value), "of", str(prm.stop_value))
+            if stop_criteria_value > prm.stop_value:
                 break
         elif prm.stopping_criteria == "fitness_evaluations":
             temp_idx = g_header.index("Fitness_evals")
             stop_criteria_value += g_logs[temp_idx]
+            print(prm.stopping_criteria, ": ", str(stop_criteria_value), "of", str(prm.stop_value))
             if stop_criteria_value > prm.stop_value:
                 break
         elif prm.stopping_criteria == "node_evaluations":
             temp_idx = g_header.index("Eval_nodes")
             stop_criteria_value += g_logs[temp_idx]
+            print(prm.stopping_criteria, ": ", str(stop_criteria_value), "of", str(prm.stop_value))
             if stop_criteria_value > prm.stop_value:
                 break
         else:
