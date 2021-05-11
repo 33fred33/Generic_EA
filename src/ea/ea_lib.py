@@ -576,7 +576,8 @@ def get_cgp_log(population, representation, current_gen):
         #Ind_eval_skip
         if graph.evaluation_skipped:
             evaluation_skipped =  1
-            total_skips += 1
+            if ind.created_in_gen == current_gen-1:
+                total_skips += 1
         else: 
             evaluation_skipped =  0
             if ind.created_in_gen == current_gen-1:
