@@ -458,31 +458,50 @@ sem_logs.to_csv(os.path.join(output_path, "Sem_logs"))
 final_log.to_csv(os.path.join(output_path, "Exp_logs"))
 """
 
-#Semantic distances experiment
+#MOEA CGP
 
-individual_level_logs = []
-gen_level_logs = []
-temp_output_path = os.path.join(*prm.output_path)
-#temp_output_path = ut.verify_path(temp_output_path)
-#param_destination = os.path.join(temp_output_path)#, temp_file[-1])
-#shutil.copyfile(param_path, param_destination)
+
+#Import parameters
+param_arg = 'experiments.param_files.params'
+prm = importlib.import_module(param_arg)
+params_dict = vars(prm)
+
+#Create output path
+experiment_output_path = os.path.join(*prm.output_path,"")
+experiment_output_path = ut.verify_path(experiment_output_path)
+
+#Parameters file
+params_file_path = os.path.join(experiment_output_path,'params.csv')
+params_vars = vars(prm)
+bad = lambda k: k.startswith("__") or isinstance(k, classmethod)
+params_dict = {k:[str(v)] for k,v in params_vars.items() if not bad(k)}
+params_df = pd.DataFrame(params_dict)
+params_df.to_csv(params_file_path, index=False)
+
+#Logs initialization
+experiment_gen_logs = pd.DataFrame()
+experiment_ind_logs = pd.DataFrame()
 
 #Methods
 def evaluate_ind(ind, semantic_indexes, dataset, objectives, active_altered, test=False):
 
+    #Data test or train
     if test:
         x = dataset.x_train
         y = dataset.y_train
     else:
         x = dataset.x_test
         y = dataset.y_test
+
     #Graph evaluated if active nodes or output nodes were altered:
     if active_altered:
         outputs = {}
         for i,data_row in enumerate(x):
             output_dict = ind.representation.evaluate(data_row = data_row)
+
             #Extracting the 0th index output gene (only one output gene)
             output = output_dict[0]
+
             #The raw output needs to be transformed
             transformed_output = ut.threshold_map(value = output
                     ,threshold = prm.numeric_output_mapping_threshold
@@ -520,6 +539,7 @@ def evaluate_ind(ind, semantic_indexes, dataset, objectives, active_altered, tes
             ind.improved_semantics_from_parent = ind.improved_semantics_from_parent/len(semantic_indexes)
             ind.semantic_change_balance = ind.semantic_change_balance/len(semantic_indexes)
 
+    #If the individual has no changes when compared to the parent
     else:
         ind.representation.evaluation_skipped = True
         for objective in objectives:
@@ -532,7 +552,7 @@ def evaluate_ind(ind, semantic_indexes, dataset, objectives, active_altered, tes
         ind.active_nodes_diff_from_parent = 0
     
 
-def sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp_obj):
+def sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp_obj, test=False):
     if prm.moea_sorting_method == "NSGAII":
         sorted_population = ea.fast_nondominated_sort(population, objectives, nsgaii_objectives)
     elif prm.moea_sorting_method == "SPEA2":
@@ -560,25 +580,36 @@ def create_offspring(parent_population, current_gen):
         active_altered = True
         new_graph, accum_count = cgp.accummulating_mutation(graph = parent.representation, percentage = prm.point_mutation_percentage)
 
+    #Create offspring
     offspring = ea.Individual(representation = new_graph
                             ,created_in_gen = current_gen
                             ,parent_index = parent_index
                             ,parent = parent)
-    offspring.update_evaluation(objective = generation_objective, value = current_gen)
 
-    #If the active graph was not altered, the individual does not need to be evaluated again:
+    #Free up memory forgetting parents from the parents
+    if offspring.parent is not None:
+        offspring.parent.parent = None
+
+    #Evaluate offspring
+    offspring.update_evaluation(objective = generation_objective, value = current_gen)
     evaluate_ind(offspring, semantic_indexes, dataset, objectives, active_altered)
+
     return offspring
 
 
 
 for trial in range(prm.trials):
 
-    #Setup
-    output_path = os.path.join(temp_output_path, str(trial), "")
-    path = ut.verify_path(output_path)
-    #shutil.copyfile(param_path, path)
+    #Initialization
+    individual_level_logs = []
+    gen_level_logs = []
     current_gen = 0
+
+    #Create trial path
+    output_path = os.path.join(experiment_output_path, str(trial), "")
+    path = ut.verify_path(output_path)
+    
+    #Load dataset
     dataset = pb.Dataset()
     dataset.load_problem(name = prm.dataset_name)
     dataset.split_data(train_rate = prm.train_test_rate)
@@ -627,7 +658,11 @@ for trial in range(prm.trials):
 
     ## Main loop
     previous_hyperarea = 0
-    for _ in range(prm.generations):
+    stop_criteria_value = 0
+    while(True):
+    #for _ in range(prm.generations):
+
+        
         #Population management.
         population = parent_population + offspring_population
         sorted_population = sort_pop_moea(population, objectives, nsgaii_objectives, spea2_objective, sp_obj)
@@ -635,8 +670,11 @@ for trial in range(prm.trials):
         #Individual_logs
         hyperarea = ea.hyperarea(sorted_population, objectives, front_objective)
         header, logs, g_header, g_logs = ea.get_cgp_log(sorted_population, cgp, current_gen)
-        g_logs += [hyperarea]
-        g_header += ["Hyperarea"]
+        front_pop = [i for i in sorted_population if i.evaluations[front_objective.name]==1]
+        _, _, front_g_header, front_g_logs = ea.get_cgp_log(front_pop, cgp, current_gen)
+        front_g_header = ["front_"+i for i in front_g_header]
+        g_logs += front_g_logs + [hyperarea]
+        g_header += front_g_header + ["Hyperarea"]
         individual_level_logs += logs
         gen_level_logs += [g_logs]
         if (current_gen+1)%10==0:
@@ -647,7 +685,7 @@ for trial in range(prm.trials):
 
         if previous_hyperarea > hyperarea:
             print("Damaged hyperarea")
-            break
+            #break
         else:
             previous_hyperarea = hyperarea
 
@@ -656,7 +694,32 @@ for trial in range(prm.trials):
         parent_population = sorted_population[:prm.population_size]
         offspring_population = [create_offspring(parent_population, current_gen) for i in range(prm.population_size)]
 
+        #stop_criteria:
+        #nodes_idx = g_header.index("Eval_nodes")
+        #nodes_evaluated += g_logs[nodes_idx] * data_rows
+        #print("progress: ", str(nodes_evaluated*100/node_max_evals), " nodes_evaluated: ", str(nodes_evaluated))
+        #if nodes_evaluated > node_max_evals:
+        #    break
+
         current_gen = current_gen + 1
+
+        #Stop criteria fitness_evaluations, node_evaluations, generations 
+        if prm.stopping_criteria == "generations":
+            if current_gen > prm.stop_value:
+                break
+        elif prm.stopping_criteria == "fitness_evaluations":
+            temp_idx = g_header.index("Fitness_evals")
+            stop_criteria_value += g_logs[temp_idx]
+            if stop_criteria_value > prm.stop_value:
+                break
+        elif prm.stopping_criteria == "node_evaluations":
+            temp_idx = g_header.index("Eval_nodes")
+            stop_criteria_value += g_logs[temp_idx]
+            if stop_criteria_value > prm.stop_value:
+                break
+        else:
+            print("Wrong stop critera")
+            break
 
     #Final logs
     individual_level_logs.insert(0, header)

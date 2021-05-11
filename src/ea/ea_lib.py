@@ -544,7 +544,18 @@ def get_cgp_log(population, representation, current_gen):
                 ,"Avg_semantic_change_balance"
                 ,"Std_semantic_change_balance"
                 ,"Avg_active_nodes_diff_from_parent"
-                ,"Std_active_nodes_diff_from_parent"]
+                ,"Std_active_nodes_diff_from_parent"
+                ,"Fitness_evals"
+                ,"Semantic_different_5"
+                ,"Semantic_different_10"
+                ,"Semantic_different_15"
+                ,"Semantic_different_20"
+                ,"Semantic_different_25"
+                ,"Semantic_different_30"
+                ,"Semantic_different_35"
+                ,"Semantic_different_40"
+                ,"Semantic_different_45"
+                ,"Semantic_different_50"]
     gen_header += ["f"+str(f_idx)+"_presence" for f_idx in f_idxs]
     gen_header += ["i"+str(i)+"_presence" for i in range(representation.n_inputs)]
     gen_header += ["Avg_" + name for name in eval_names]
@@ -631,6 +642,17 @@ def get_cgp_log(population, representation, current_gen):
             ,stat.stdev(list_semantic_change_balance)
             ,stat.mean(list_active_nodes_diff_from_parent)
             ,stat.stdev(list_active_nodes_diff_from_parent)
+            ,pop_size-total_skips
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.05])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.1])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.15])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.2])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.25])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.3])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.35])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.4])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.45])/pop_size
+            ,sum([1 for sd in list_semantic_distance_from_parent if sd>=0.5])/pop_size
             ]
     gen_row += [total_funcs_count[i]*100/sum(total_funcs_count) for i in f_idxs]
     gen_row += [total_used_inputs_count[i]*100/sum(total_used_inputs_count) for i in range(graph.n_inputs)]

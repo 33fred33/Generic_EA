@@ -5,7 +5,7 @@ from datetime import datetime
 ####################################
 
 
-trials = 20
+trials = 3
 random_seed = 0
 dataset_name = "ion"
     #Options: ion, spect, yst_m3, yst_mit, even_parity
@@ -22,18 +22,18 @@ semantic_peculiarity_b = 3
 
 n_outputs = 1
 n_rows = 1
-n_columns = 200
+n_columns = 100
 levels_back = n_columns
 allow_input_to_output = True
 inputs_available_to_all_columns = True
 functions = ["sum","sub","mul","safe_divide_one"]
     #Options: sum, sub, mul, safe_divide_one, safe_divide_one, 
-point_mutation_percentage = 6
+point_mutation_percentage = 5
     #Domain: in (0,100]
 numeric_output_mapping_threshold = 0.5
 label_index_above_threshold = 1
 label_index_below_threshold = 0
-cgp_operator = "accum"
+cgp_operator = "point"
     #Options: point, sam, accum,
 
 
@@ -42,14 +42,13 @@ cgp_operator = "accum"
 ####################################
 
 population_size = 200
-tournament_size = 7
-moea_sorting_method = "SPEA2"
+tournament_size = 5
+moea_sorting_method = "NSGAII"
     #Options: NSGAII, SPEA2, NSGAII_SP
-stopping_criteria = "generations"
-    #Options: fitness_evaluations, node_evaluations, generations 
-generations = 100
-node_max_evals = 100000000
-fitness_max_evals = 100000
+stopping_criteria = "fitness_evaluations"
+    #Options: fitness_evaluations, node_evaluations, generations
+stop_value = 5000
+
 objective_names = ["accuracy_in_label", "accuracy_in_label"]
     #Options: accuracy, accuracy_in_label, active_nodes
 objective_to_max = [True, True]
