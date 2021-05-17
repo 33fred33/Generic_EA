@@ -703,7 +703,7 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
         Semantic_different_45 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.45])/new_ind_pop_size
         Semantic_different_50 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.5])/new_ind_pop_size
 
-    if cluster_counts != []:
+    if cluster_counts == []:
         N_clusters = 0
         Max_cluster_size_rate = 0
         Clustered_pop_rate = 0
