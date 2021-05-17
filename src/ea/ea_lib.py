@@ -223,8 +223,42 @@ def semantic_peculiarity(population, output_vector, semantic_indexes, sp_objecti
                 represented_fs[ind_idx].append(f)
                 c += 1
         r[f] = (1 - (c/n))**b
+        #r[f] = 1-math.sqrt(1-(x-1)**2)
     for ind_idx, ind in enumerate(population):
         semantic_peculiarity = sum([r[f] for f in represented_fs[ind_idx]])/s
+        #semantic_peculiarity = max([r[f] for f in represented_fs[ind_idx]])
+        ind.evaluations[sp_objective.name] = semantic_peculiarity
+        p[ind_idx] = semantic_peculiarity
+    return p, r, represented_fs
+
+def max_semantic_peculiarity(population, output_vector, semantic_indexes, sp_objective):
+    """
+    Updates the semantic peculiarity in every individual as one of
+    their evaluations, with key = sp_objective.name
+    Inputs:
+    - population (list of Individual instances)
+    - output_vector (list of labels) the full set of outputs of the fitness cases
+    - semantic_indexes (list of ints): list of indexes that define the semantic set
+    - sp_objective (Objective instance)
+    Returns: 
+    - (dict with fitness_case_index:semantic_relevance)
+    """
+    s = len(semantic_indexes)
+    n = len(population)
+    represented_fs = defaultdict(lambda:[])
+    r = {}
+    p = {}
+    for f in semantic_indexes:
+        c = 0
+        for ind_idx, ind in enumerate(population):
+            if output_vector[f]==ind.semantics_all[f]:
+                represented_fs[ind_idx].append(f)
+                c += 1
+        r[f] = (1 - (c/n))**b
+        #r[f] = 1-math.sqrt(1-(x-1)**2)
+    for ind_idx, ind in enumerate(population):
+        #semantic_peculiarity = sum([r[f] for f in represented_fs[ind_idx]])/s
+        semantic_peculiarity = max([r[f] for f in represented_fs[ind_idx]])
         ind.evaluations[sp_objective.name] = semantic_peculiarity
         p[ind_idx] = semantic_peculiarity
     return p, r, represented_fs
@@ -475,12 +509,13 @@ def spea2_sort(population, conflicting_objectives, spea2_objective):
     return sorted_population
 
 #Logs and data
-def get_cgp_log(population, representation, current_gen):
+def get_cgp_log(population, representation, current_gen, clustering_objectives):
     """
     Inputs
     - population: (list of Individual instances)}
     - representation: (CGP_Representation instance)
     - current_gen: (int)
+    - clustering_objectives: (list of Objective instances)
     Returns
     - (list of strings) header of the individual level logs
     - (list of lists of numbers) individual level logs
@@ -496,6 +531,7 @@ def get_cgp_log(population, representation, current_gen):
     n_evals = len(eval_names)
     f_idxs = [i for i in range(representation.n_functions)]
     logs = []
+    _, cluster_counts = get_unique_inds_by_evals(population, clustering_objectives)
 
     #Variables to gather generational info
     nodes_evaluated = 0
@@ -526,7 +562,8 @@ def get_cgp_log(population, representation, current_gen):
             ,"Improved_semantics_from_parent"
             ,"Semantic_change_balance"
             ,"Active_nodes_diff_from_parent"
-            ,"Graph"]
+            #,"Graph"
+            ]
     header += ["f"+str(f_idx)+"_count" for f_idx in f_idxs]
     header += ["i"+str(i)+"_count" for i in range(representation.n_inputs)]
     header += [name for name in eval_names]
@@ -559,7 +596,11 @@ def get_cgp_log(population, representation, current_gen):
                 ,"Semantic_different_35"
                 ,"Semantic_different_40"
                 ,"Semantic_different_45"
-                ,"Semantic_different_50"]
+                ,"Semantic_different_50"
+                ,"N_clusters"
+                ,"Max_cluster_size_rate"
+                ,"Clustered_pop_rate"
+                ,"Avg_cluster_size_rate"]
     gen_header += ["f"+str(f_idx)+"_presence" for f_idx in f_idxs]
     gen_header += ["i"+str(i)+"_presence" for i in range(representation.n_inputs)]
     gen_header += ["Avg_" + name for name in eval_names]
@@ -619,100 +660,120 @@ def get_cgp_log(population, representation, current_gen):
             ,ind.improved_semantics_from_parent
             ,ind.semantic_change_balance
             ,ind.active_nodes_diff_from_parent
-            ,str(ind.representation)]
+            #,str(ind.representation)
+            ]
         ind_row += funcs_count
         ind_row += used_inputs_count
         ind_row += evals
         ind_row += parent_evals
         logs.append(ind_row)
-    
-    #Generation level logs
-    if pop_size >= 1:
+
+    #No new individuals in current gen (possible if a subpopulation is passed to this method)
+    if new_ind_pop_size == 0:
+        list_semantic_distance_from_parent = [0]
+        list_damaged_semantics_from_parent = [0]
+        list_improved_semantics_from_parent = [0]
+        list_semantic_change_balance = [0]
+        list_active_nodes_diff_from_parent = [0]
+        new_ind_pop_size = 1
+        Semantic_different_5 = "N/A"
+        Semantic_different_10 = "N/A"
+        Semantic_different_15 = "N/A"
+        Semantic_different_20 = "N/A"
+        Semantic_different_25 = "N/A"
+        Semantic_different_30 = "N/A"
+        Semantic_different_35 = "N/A"
+        Semantic_different_40 = "N/A"
+        Semantic_different_45 = "N/A"
+        Semantic_different_50 = "N/A"
+    else:
         list_semantic_distance_from_parent = [x for x in list_semantic_distance_from_parent if x is not None]
         list_damaged_semantics_from_parent = [x for x in list_damaged_semantics_from_parent if x is not None]
         list_improved_semantics_from_parent = [x for x in list_improved_semantics_from_parent if x is not None]
         list_semantic_change_balance = [x for x in list_semantic_change_balance if x is not None]
         list_active_nodes_diff_from_parent = [x for x in list_active_nodes_diff_from_parent if x is not None]
+        Semantic_different_5 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.05])/new_ind_pop_size
+        Semantic_different_10 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.1])/new_ind_pop_size
+        Semantic_different_15 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.15])/new_ind_pop_size
+        Semantic_different_20 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.2])/new_ind_pop_size
+        Semantic_different_25 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.25])/new_ind_pop_size
+        Semantic_different_30 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.3])/new_ind_pop_size
+        Semantic_different_35 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.35])/new_ind_pop_size
+        Semantic_different_40 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.4])/new_ind_pop_size
+        Semantic_different_45 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.45])/new_ind_pop_size
+        Semantic_different_50 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.5])/new_ind_pop_size
 
-        #No new individuals in current gen (possible if a subpopulation is passed to this method)
-        if new_ind_pop_size == 0:
-            new_ind_pop_size = 1
-            Semantic_different_5 = "N/A"
-            Semantic_different_10 = "N/A"
-            Semantic_different_15 = "N/A"
-            Semantic_different_20 = "N/A"
-            Semantic_different_25 = "N/A"
-            Semantic_different_30 = "N/A"
-            Semantic_different_35 = "N/A"
-            Semantic_different_40 = "N/A"
-            Semantic_different_45 = "N/A"
-            Semantic_different_50 = "N/A"
-        else:
-            Semantic_different_5 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.05])/new_ind_pop_size
-            Semantic_different_10 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.1])/new_ind_pop_size
-            Semantic_different_15 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.15])/new_ind_pop_size
-            Semantic_different_20 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.2])/new_ind_pop_size
-            Semantic_different_25 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.25])/new_ind_pop_size
-            Semantic_different_30 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.3])/new_ind_pop_size
-            Semantic_different_35 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.35])/new_ind_pop_size
-            Semantic_different_40 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.4])/new_ind_pop_size
-            Semantic_different_45 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.45])/new_ind_pop_size
-            Semantic_different_50 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.5])/new_ind_pop_size
+    if cluster_counts != []:
+        N_clusters = 0
+        Max_cluster_size_rate = 0
+        Clustered_pop_rate = 0
+        Avg_cluster_size_rate = 0
+    else:
+        relevant_clusters = [i for i in cluster_counts if i>1]
+        N_clusters = len(relevant_clusters)
+        Max_cluster_size_rate = max(relevant_clusters)/pop_size
+        Clustered_pop_rate = sum(relevant_clusters)/pop_size
+        if len(relevant_clusters) > 0:
+            Avg_cluster_size_rate = stat.mean(relevant_clusters)/pop_size
 
-        if len(list_semantic_distance_from_parent) > 1:
-            stdev_list_semantic_distance_from_parent = stat.stdev(list_semantic_distance_from_parent)
-        else:
-            stdev_list_semantic_distance_from_parent = 0
-        if len(list_damaged_semantics_from_parent) > 1:
-            stdev_list_damaged_semantics_from_parent = stat.stdev(list_damaged_semantics_from_parent)
-        else:
-            stdev_list_damaged_semantics_from_parent = 0
-        if len(list_improved_semantics_from_parent) > 1:
-            stdev_list_improved_semantics_from_parent = stat.stdev(list_improved_semantics_from_parent)
-        else:
-            stdev_list_improved_semantics_from_parent = 0
-        if len(list_semantic_change_balance) > 1:
-            stdev_list_semantic_change_balance = stat.stdev(list_semantic_change_balance)
-        else:
-            stdev_list_semantic_change_balance = 0
-        if len(list_active_nodes_diff_from_parent) > 1:
-            stdev_list_active_nodes_diff_from_parent = stat.stdev(list_active_nodes_diff_from_parent)
-        else:
-            stdev_list_active_nodes_diff_from_parent = 0
+    if len(list_semantic_distance_from_parent) > 1:
+        stdev_list_semantic_distance_from_parent = stat.stdev(list_semantic_distance_from_parent)
+    else:
+        stdev_list_semantic_distance_from_parent = 0
+    if len(list_damaged_semantics_from_parent) > 1:
+        stdev_list_damaged_semantics_from_parent = stat.stdev(list_damaged_semantics_from_parent)
+    else:
+        stdev_list_damaged_semantics_from_parent = 0
+    if len(list_improved_semantics_from_parent) > 1:
+        stdev_list_improved_semantics_from_parent = stat.stdev(list_improved_semantics_from_parent)
+    else:
+        stdev_list_improved_semantics_from_parent = 0
+    if len(list_semantic_change_balance) > 1:
+        stdev_list_semantic_change_balance = stat.stdev(list_semantic_change_balance)
+    else:
+        stdev_list_semantic_change_balance = 0
+    if len(list_active_nodes_diff_from_parent) > 1:
+        stdev_list_active_nodes_diff_from_parent = stat.stdev(list_active_nodes_diff_from_parent)
+    else:
+        stdev_list_active_nodes_diff_from_parent = 0
 
-        gen_row = [current_gen
-                ,pop_size
-                ,nodes_evaluated
-                ,total_age/pop_size
-                ,total_actives/pop_size
-                ,total_skips
-                ,total_skips*100/new_ind_pop_size
-                ,stat.mean(list_semantic_distance_from_parent)
-                ,stdev_list_semantic_distance_from_parent
-                ,stat.mean(list_damaged_semantics_from_parent)
-                ,stdev_list_damaged_semantics_from_parent
-                ,stat.mean(list_improved_semantics_from_parent)
-                ,stdev_list_improved_semantics_from_parent
-                ,stat.mean(list_semantic_change_balance)
-                ,stdev_list_semantic_change_balance
-                ,stat.mean(list_active_nodes_diff_from_parent)
-                ,stdev_list_active_nodes_diff_from_parent
-                ,new_ind_pop_size-total_skips
-                ,Semantic_different_5
-                ,Semantic_different_10
-                ,Semantic_different_15
-                ,Semantic_different_20
-                ,Semantic_different_25
-                ,Semantic_different_30
-                ,Semantic_different_35
-                ,Semantic_different_40
-                ,Semantic_different_45
-                ,Semantic_different_50
-                ]
-        gen_row += [total_funcs_count[i]*100/sum(total_funcs_count) for i in f_idxs]
-        gen_row += [total_used_inputs_count[i]*100/sum(total_used_inputs_count) for i in range(graph.n_inputs)]
-        gen_row += [v/pop_size for v in total_evals]
-        #gen_row += [v/pop_size for v in total_evals]
+    gen_row = [current_gen
+            ,pop_size
+            ,nodes_evaluated
+            ,total_age/pop_size
+            ,total_actives/pop_size
+            ,total_skips
+            ,total_skips*100/new_ind_pop_size
+            ,stat.mean(list_semantic_distance_from_parent)
+            ,stdev_list_semantic_distance_from_parent
+            ,stat.mean(list_damaged_semantics_from_parent)
+            ,stdev_list_damaged_semantics_from_parent
+            ,stat.mean(list_improved_semantics_from_parent)
+            ,stdev_list_improved_semantics_from_parent
+            ,stat.mean(list_semantic_change_balance)
+            ,stdev_list_semantic_change_balance
+            ,stat.mean(list_active_nodes_diff_from_parent)
+            ,stdev_list_active_nodes_diff_from_parent
+            ,new_ind_pop_size-total_skips
+            ,Semantic_different_5
+            ,Semantic_different_10
+            ,Semantic_different_15
+            ,Semantic_different_20
+            ,Semantic_different_25
+            ,Semantic_different_30
+            ,Semantic_different_35
+            ,Semantic_different_40
+            ,Semantic_different_45
+            ,Semantic_different_50
+            ,N_clusters
+            ,Max_cluster_size_rate
+            ,Clustered_pop_rate
+            ,Avg_cluster_size_rate
+            ]
+    gen_row += [total_funcs_count[i]*100/sum(total_funcs_count) for i in f_idxs]
+    gen_row += [total_used_inputs_count[i]*100/sum(total_used_inputs_count) for i in range(graph.n_inputs)]
+    gen_row += [v/pop_size for v in total_evals]
+    #gen_row += [v/pop_size for v in total_evals]
     
 
     

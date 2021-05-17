@@ -579,6 +579,26 @@ def create_offspring(parent_population, current_gen):
     elif prm.cgp_operator == "accum":
         active_altered = True
         new_graph, accum_count = cgp.accummulating_mutation(graph = parent.representation, percentage = prm.point_mutation_percentage)
+    elif prm.cgp_operator == "sasam":
+        original_parent = parent
+        for attempt in range(prm.max_sasam_attempts):
+            new_graph = cgp.single_active_mutation(graph = parent.representation)
+            #Create offspring
+            offspring = ea.Individual(representation = new_graph
+                                ,created_in_gen = current_gen
+                                ,parent_index = parent_index
+                                ,parent = original_parent)
+            #Free up memory forgetting parents from the parents
+            if offspring.parent is not None:
+                offspring.parent.parent = None
+            #Evaluate offspring
+            offspring.update_evaluation(objective = generation_objective, value = current_gen)
+            evaluate_ind(offspring, semantic_indexes, dataset, objectives, True)
+            if ind.semantic_distance_from_parent != 0:
+                return offspring
+            else:
+                parent = offspring
+        return offspring
 
     #Create offspring
     offspring = ea.Individual(representation = new_graph
@@ -669,9 +689,9 @@ for trial in range(prm.trials):
 
         #Logs
         hyperarea = ea.hyperarea(sorted_population, objectives, front_objective)
-        header, logs, g_header, g_logs = ea.get_cgp_log(sorted_population, cgp, current_gen)
+        header, logs, g_header, g_logs = ea.get_cgp_log(sorted_population, cgp, current_gen, objectives)
         front_pop = [i for i in sorted_population if i.evaluations[front_objective.name]==1]
-        _, _, front_g_header, front_g_logs = ea.get_cgp_log(front_pop, cgp, current_gen)
+        _, _, front_g_header, front_g_logs = ea.get_cgp_log(front_pop, cgp, current_gen, objectives)
         front_g_header = ["front_"+i for i in front_g_header]
         g_logs += front_g_logs + [hyperarea]
         g_header += front_g_header + ["Hyperarea"]
@@ -732,7 +752,7 @@ for trial in range(prm.trials):
     #Logs
     test_g_logs = []
     hyperarea = ea.hyperarea(population, objectives, front_objective)
-    header, logs, g_header, g_logs = ea.get_cgp_log(population, cgp, current_gen)
+    header, logs, g_header, g_logs = ea.get_cgp_log(population, cgp, current_gen, objectives)
     g_logs+= [hyperarea]
     g_header += ["Hyperarea"]
     test_g_logs += [g_logs]
@@ -742,3 +762,4 @@ for trial in range(prm.trials):
     ut.logs_to_file(logs, "Test_ind_logs", path)
     test_g_logs.insert(0, g_header)
     ut.logs_to_file(test_g_logs, "Test_gen_logs", path)
+    
