@@ -711,11 +711,13 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
     else:
         relevant_clusters = [i for i in cluster_counts if i>1]
         N_clusters = len(relevant_clusters)
-        Max_cluster_size_rate = max(relevant_clusters)/pop_size
         Clustered_pop_rate = sum(relevant_clusters)/pop_size
         if len(relevant_clusters) > 0:
+            Max_cluster_size_rate = max(relevant_clusters)/pop_size
             Avg_cluster_size_rate = stat.mean(relevant_clusters)/pop_size
-
+        else:
+            Max_cluster_size_rate = 0
+            Avg_cluster_size_rate = 0
     if len(list_semantic_distance_from_parent) > 1:
         stdev_list_semantic_distance_from_parent = stat.stdev(list_semantic_distance_from_parent)
     else:

@@ -33,7 +33,7 @@ point_mutation_percentage = 10
 numeric_output_mapping_threshold = 0.5
 label_index_above_threshold = 1
 label_index_below_threshold = 0
-cgp_operator = "sasam"
+cgp_operator = "accum"
     #Options: point, sam, accum, sasam,
 max_sasam_attempts = 20
     #Domain: in [1,inf)
@@ -70,7 +70,7 @@ accuracy_label_index = [0,1]
 # Logs #############################
 ####################################
 
-experiment_name = dataset_name + "_" + cgp_operator + "_" + moea_sorting_method
+experiment_name = dataset_name + "_" + cgp_operator + str(point_mutation_percentage) + "_" + moea_sorting_method
 timestamp_format = ("%Y_%m_%d-%H_%M_%S")
 now = datetime.now()
 time_string = now.strftime(timestamp_format)

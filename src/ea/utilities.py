@@ -3,6 +3,7 @@ import numpy as np
 import os
 import errno
 import csv
+import statistics as stat
 
 #Utility functions
 
@@ -71,6 +72,8 @@ def logs_to_file(logs, name, path = None):
             str_row = [str(v) for v in row]
             logs_writer.writerow(str_row)
 
+#def get_stats(the_list):
+#    return stat.mean(the_list), stat.mode(the_list), stat.std(the_list), min(the_list), max(the_list)
 
 #Operations
 def safe_divide_numerator(a, b):
