@@ -34,19 +34,26 @@ class Individual:
         Inputs
         - representation: (instance from class) asssigned individual characteristics
         - generation: (int) generation of creation of the individual
-        """
+        """ #Missing: support for multiple outputs from every graph
         self.representation = representation
         self.semantics_all = {} 
+        self.comparable_outputs = {}
         self.evaluations = {}
         self.created_in_gen = created_in_gen
         self.parent_index = parent_index
         self.parent = parent
+        self.age = 0
+        
+
+        #Free up memory
+        if self.parent is not None:
+            self.parent.parent = None
 
         #For logs
         self.semantic_distance_from_parent = None
-        self.damaged_semantics_from_parent = None
-        self.improved_semantics_from_parent = None
-        self.semantic_change_balance = None
+        #self.damaged_semantics_from_parent = None
+        #self.improved_semantics_from_parent = None
+        #self.semantic_change_balance = None
         self.active_nodes_diff_from_parent = None
 
     def update_evaluation(self,objective,value):
@@ -54,6 +61,33 @@ class Individual:
     
     def update_semantics_all(self,semantics_all):
         self.semantics_all = {k:v for k,v in semantics_all.items()}
+
+    def update_comparable_outputs(self, outputs):
+        self.comparable_outputs = {k:v for k,v in outputs.items()}
+
+    def raise_age(self):
+        self.age = self.age + 1
+
+    def get_log(self):
+        """
+        Inputs:
+        ind (Individual instance)
+        Returns:
+        (DataFrame) Logs data
+        """
+        log_dict = {
+            "Generation_of_creation": self.created_in_gen
+            ,"Age": self.age
+            ,"Semantic_distance_from_parent": self.semantic_distance_from_parent
+            ,"Active_nodes_diff_from_parent": self.active_nodes_diff_from_parent
+            ,"Parent_index": self.parent_index}
+        for eval_name, value in self.evaluations.items():
+            log_dict[eval_name] = value
+        temp_log = pd.DataFrame(log_dict, index = [0])
+
+        #Concat the logs from the representation
+        logs = pd.concat([temp_log,self.representation.get_log()], axis=1)
+        return logs
 
     def __Str__(self):
         label = "Ind gen " + str(self.generation) + " R: " + str(self.representation)
@@ -139,7 +173,7 @@ def inds_same_by_evals(ind1, ind2, objectives):
             return False
     return True
     
-def get_unique_inds_by_evals(population, objectives):
+def get_unique_inds_by_evals(population, objectives): #BAD
     """
     For plotting purposes
     Inputs
@@ -171,6 +205,13 @@ def get_unique_inds_by_evals(population, objectives):
         evals.append(x)
 
     return evals, counts
+
+def raise_ages(population):
+    """
+    Increases the ages of the population
+    """
+    for ind in population:
+        ind.raise_age()
 
 #Semantics
 def semantic_distance(ind1, ind2, semantic_indexes):
@@ -219,7 +260,7 @@ def semantic_peculiarity(population, output_vector, semantic_indexes, sp_objecti
     for f in semantic_indexes:
         c = 0
         for ind_idx, ind in enumerate(population):
-            if output_vector[f]==ind.semantics_all[f]:
+            if output_vector[f]==ind.comparable_outputs[f]:
                 represented_fs[ind_idx].append(f)
                 c += 1
         r[f] = (1 - (c/n))**b
@@ -254,7 +295,7 @@ def max_semantic_peculiarity(population, output_vector, semantic_indexes, sp_obj
             if output_vector[f]==ind.semantics_all[f]:
                 represented_fs[ind_idx].append(f)
                 c += 1
-        r[f] = (1 - (c/n))**b
+        r[f] = 1 - (c/n)
         #r[f] = 1-math.sqrt(1-(x-1)**2)
     for ind_idx, ind in enumerate(population):
         #semantic_peculiarity = sum([r[f] for f in represented_fs[ind_idx]])/s
@@ -300,6 +341,10 @@ def hyperarea(population, objectives, front_objective):
     (float) The hyperarea
     """
     assert len(objectives) == 2
+    for ind in population:
+        if front_objective.name not in ind.evaluations.keys():
+            set_ranks(population, objectives, front_objective)
+            break
 
     #Variables
     obj0 = objectives[0]
@@ -307,7 +352,6 @@ def hyperarea(population, objectives, front_objective):
     hyperarea = 0
 
     #Filter population to get pareto front only and sort
-    set_ranks(population, objectives, front_objective)
     front_pop = [i for i in population if i.evaluations[front_objective.name]==1]
     sorted_pop = sort_population(front_pop, [obj0])
 
@@ -325,7 +369,7 @@ def hyperarea(population, objectives, front_objective):
                 last_value = new_value
     return hyperarea
 
-def plot_pareto(population, objectives, cluster_type = "size", front_objective=None, path = None, name = None):
+def plot_pareto(population, objectives, cluster_type = "size", front_objective=None, path = None, name = None): #BAD
     unique_evals, counts = get_unique_inds_by_evals(population, objectives)
     percentages = [c*100/sum(counts) for c in counts]
     
@@ -355,6 +399,105 @@ def plot_pareto(population, objectives, cluster_type = "size", front_objective=N
     else:
         print("Wrong cluster_type")
     plt.close('all')
+
+def get_cluster_logs(population, objectives):
+    """
+    Inputs:
+    population (list of Inidividual instances)
+    objectives (list of Objective instances)
+    Returns:
+    (DataFrame) Cluster_logs
+    """
+    pop_size = len(population)
+    if pop_size > 0:
+        _, cluster_counts = get_unique_inds_by_evals(population, objectives)
+        relevant_clusters = [i for i in cluster_counts if i>1]
+        n_clusters = len(relevant_clusters)
+        if n_clusters > 0:
+            return pd.DataFrame({"N_clusters": n_clusters
+                ,"Max_cluster_size_rate": max(relevant_clusters)/pop_size
+                ,"Clustered_pop_rate": sum(relevant_clusters)/pop_size
+                ,"Mean_cluster_size_rate": stat.mean(relevant_clusters)/pop_size
+                ,"Unique_objective_vectors": len(cluster_counts)
+                }, index = [0])
+
+    return pd.DataFrame({"N_clusters": 0
+                ,"Max_cluster_size_rate": 0
+                ,"Clustered_pop_rate": 0
+                ,"Mean_cluster_size_rate": 0
+                ,"Unique_objective_vectors": 0
+                }, index = [0])
+
+def moea_individual_level_log(population):
+    ind_logs = population[0].get_log()
+    for ind in population[1:]:
+        ind_logs = ind_logs.append(ind.get_log(), ignore_index = True)
+    return ind_logs
+
+def moea_population_log(population, objectives):
+    """
+    Inputs:
+    population (list of Individual instances)
+    objectives (list of Objective instances)
+    Returns
+    (DataFrame) Population level logs
+    """
+    assert len(population) > 0
+    front_objective, _ = get_nsgaii_objectives(front_name = "logs_front")
+    set_ranks(population, objectives, front_objective)
+    pop_size = len(population)
+    
+    #inidividual_level_data
+    ind_logs = moea_individual_level_log(population)
+    inds_cluster_logs = get_cluster_logs(population, objectives)
+
+    #Offsprings
+    offspring_logs = ind_logs.loc[ind_logs["Age"]==0]
+    o_pop_size = len(offspring_logs)
+
+    #Front
+    front_pop = [ind for ind in population if ind.evaluations[front_objective.name]==1]
+    front_logs = ind_logs.loc[ind_logs[front_objective.name]==1]
+    front_size = len(front_pop)
+    front_cluster_logs = get_cluster_logs(front_pop, objectives)
+    new_colnames = ["Front_" + n for n in list(front_cluster_logs.columns)]
+    front_cluster_logs.columns = new_colnames
+
+    #Population level data
+    pop_log_dict = {
+
+        #Population data
+        "Hyperarea":hyperarea(population, objectives, front_objective)
+        ,"Pop_size":pop_size
+        ,"Avg_age": ind_logs["Age"].mean()
+        ,"Avg_active_nodes": ind_logs["Graph_actives"].mean()
+        
+        #Offsprings data
+        ,"Offsprings_pop_size":o_pop_size
+        ,"Eval_nodes": offspring_logs.loc[offspring_logs["Ind_eval_skip"]==0, "Graph_actives"].sum()
+        ,"Eval_skips": offspring_logs["Ind_eval_skip"].sum()
+        ,"Eval_skips_ptg": offspring_logs["Ind_eval_skip"].sum()/o_pop_size
+        ,"Avg_semantic_distance_from_parent": offspring_logs["Semantic_distance_from_parent"].mean()
+        ,"Std_semantic_distance_from_parent": stat.stdev(offspring_logs["Semantic_distance_from_parent"])
+        ,"Sd_q10": float(offspring_logs["Semantic_distance_from_parent"].quantile([0.1]))
+        ,"Sd_q25": float(offspring_logs["Semantic_distance_from_parent"].quantile([0.25]))
+        ,"Sd_q50": float(offspring_logs["Semantic_distance_from_parent"].quantile([0.5]))
+        ,"Sd_q75": float(offspring_logs["Semantic_distance_from_parent"].quantile([0.75]))
+        ,"Sd_max": max(offspring_logs["Semantic_distance_from_parent"])
+        ,"Sd_min": min(offspring_logs["Semantic_distance_from_parent"])
+        ,"Avg_active_nodes_diff_from_parent": offspring_logs["Active_nodes_diff_from_parent"].mean()
+        ,"Std_active_nodes_diff_from_parent": stat.stdev(offspring_logs["Active_nodes_diff_from_parent"])
+        ,"Fitness_evals": o_pop_size - offspring_logs["Ind_eval_skip"].sum()
+
+        #Front data
+        ,"Pareto front size": front_size
+        }
+
+    #Gathering all the logs
+    pop_log = pd.DataFrame(pop_log_dict, index = [0])
+    clusters_logs = pd.concat([front_cluster_logs, inds_cluster_logs], axis=1)
+    pop_logs = pd.concat([pop_log, clusters_logs], axis=1)
+    return pop_logs
 
 #NSGAII exclusive methods
 def get_nsgaii_objectives(front_name = "front", crowding_distance_name = "cd"):
@@ -542,9 +685,9 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
     total_used_inputs_count = [0 for _ in range(model.representation.n_inputs)]
     total_evals = [0 for _ in range(n_evals)]
     list_semantic_distance_from_parent = []
-    list_damaged_semantics_from_parent = []
-    list_improved_semantics_from_parent = []
-    list_semantic_change_balance = []
+    #list_damaged_semantics_from_parent = []
+    #list_improved_semantics_from_parent = []
+    #list_semantic_change_balance = []
     list_active_nodes_diff_from_parent = []
 
 
@@ -558,9 +701,9 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
             ,"Graph_actives"
             ,"Ind_eval_skip"
             ,"Semantic_distance_from_parent"
-            ,"Damaged_semantics_from_parent"
-            ,"Improved_semantics_from_parent"
-            ,"Semantic_change_balance"
+            #,"Damaged_semantics_from_parent"
+            #,"Improved_semantics_from_parent"
+            #,"Semantic_change_balance"
             ,"Active_nodes_diff_from_parent"
             #,"Graph"
             ]
@@ -578,12 +721,12 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
                 ,"Eval_skips_ptg"
                 ,"Avg_semantic_distance_from_parent"
                 ,"Std_semantic_distance_from_parent"
-                ,"Avg_damaged_semantics_from_parent"
-                ,"Std_damaged_semantics_from_parent"
-                ,"Avg_improved_semantics_from_parent"
-                ,"Std_improved_semantics_from_parent"
-                ,"Avg_semantic_change_balance"
-                ,"Std_semantic_change_balance"
+                #,"Avg_damaged_semantics_from_parent"
+                #,"Std_damaged_semantics_from_parent"
+                #,"Avg_improved_semantics_from_parent"
+                #,"Std_improved_semantics_from_parent"
+                #,"Avg_semantic_change_balance"
+                #,"Std_semantic_change_balance"
                 ,"Avg_active_nodes_diff_from_parent" #Number of active nodes only
                 ,"Std_active_nodes_diff_from_parent"
                 ,"Fitness_evals"
@@ -614,9 +757,9 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
         total_actives += graph_actives
         if ind.created_in_gen == current_gen:
             list_semantic_distance_from_parent.append(ind.semantic_distance_from_parent)
-            list_damaged_semantics_from_parent.append(ind.damaged_semantics_from_parent)
-            list_improved_semantics_from_parent.append(ind.improved_semantics_from_parent)
-            list_semantic_change_balance.append(ind.semantic_change_balance)
+            #list_damaged_semantics_from_parent.append(ind.damaged_semantics_from_parent)
+            #list_improved_semantics_from_parent.append(ind.improved_semantics_from_parent)
+            #list_semantic_change_balance.append(ind.semantic_change_balance)
             list_active_nodes_diff_from_parent.append(ind.active_nodes_diff_from_parent)
 
         #Ind_eval_skip
@@ -656,9 +799,9 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
             ,graph_actives
             ,evaluation_skipped
             ,ind.semantic_distance_from_parent
-            ,ind.damaged_semantics_from_parent
-            ,ind.improved_semantics_from_parent
-            ,ind.semantic_change_balance
+            #,ind.damaged_semantics_from_parent
+            #,ind.improved_semantics_from_parent
+            #,ind.semantic_change_balance
             ,ind.active_nodes_diff_from_parent
             #,str(ind.representation)
             ]
@@ -671,9 +814,9 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
     #No new individuals in current gen (possible if a subpopulation is passed to this method)
     if new_ind_pop_size == 0:
         list_semantic_distance_from_parent = [0]
-        list_damaged_semantics_from_parent = [0]
-        list_improved_semantics_from_parent = [0]
-        list_semantic_change_balance = [0]
+        #list_damaged_semantics_from_parent = [0]
+        #list_improved_semantics_from_parent = [0]
+        #list_semantic_change_balance = [0]
         list_active_nodes_diff_from_parent = [0]
         new_ind_pop_size = 1
         Semantic_different_5 = "N/A"
@@ -688,9 +831,9 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
         Semantic_different_50 = "N/A"
     else:
         list_semantic_distance_from_parent = [x for x in list_semantic_distance_from_parent if x is not None]
-        list_damaged_semantics_from_parent = [x for x in list_damaged_semantics_from_parent if x is not None]
-        list_improved_semantics_from_parent = [x for x in list_improved_semantics_from_parent if x is not None]
-        list_semantic_change_balance = [x for x in list_semantic_change_balance if x is not None]
+        #list_damaged_semantics_from_parent = [x for x in list_damaged_semantics_from_parent if x is not None]
+        #list_improved_semantics_from_parent = [x for x in list_improved_semantics_from_parent if x is not None]
+        #list_semantic_change_balance = [x for x in list_semantic_change_balance if x is not None]
         list_active_nodes_diff_from_parent = [x for x in list_active_nodes_diff_from_parent if x is not None]
         Semantic_different_5 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.05])/new_ind_pop_size
         Semantic_different_10 = sum([1 for sd in list_semantic_distance_from_parent if sd>=0.1])/new_ind_pop_size
@@ -722,6 +865,7 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
         stdev_list_semantic_distance_from_parent = stat.stdev(list_semantic_distance_from_parent)
     else:
         stdev_list_semantic_distance_from_parent = 0
+    """
     if len(list_damaged_semantics_from_parent) > 1:
         stdev_list_damaged_semantics_from_parent = stat.stdev(list_damaged_semantics_from_parent)
     else:
@@ -734,6 +878,7 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
         stdev_list_semantic_change_balance = stat.stdev(list_semantic_change_balance)
     else:
         stdev_list_semantic_change_balance = 0
+    """
     if len(list_active_nodes_diff_from_parent) > 1:
         stdev_list_active_nodes_diff_from_parent = stat.stdev(list_active_nodes_diff_from_parent)
     else:
@@ -748,12 +893,12 @@ def get_cgp_log(population, representation, current_gen, clustering_objectives):
             ,total_skips*100/new_ind_pop_size
             ,stat.mean(list_semantic_distance_from_parent)
             ,stdev_list_semantic_distance_from_parent
-            ,stat.mean(list_damaged_semantics_from_parent)
-            ,stdev_list_damaged_semantics_from_parent
-            ,stat.mean(list_improved_semantics_from_parent)
-            ,stdev_list_improved_semantics_from_parent
-            ,stat.mean(list_semantic_change_balance)
-            ,stdev_list_semantic_change_balance
+            #,stat.mean(list_damaged_semantics_from_parent)
+            #,stdev_list_damaged_semantics_from_parent
+            #,stat.mean(list_improved_semantics_from_parent)
+            #,stdev_list_improved_semantics_from_parent
+            #,stat.mean(list_semantic_change_balance)
+            #,stdev_list_semantic_change_balance
             ,stat.mean(list_active_nodes_diff_from_parent)
             ,stdev_list_active_nodes_diff_from_parent
             ,new_ind_pop_size-total_skips
@@ -855,6 +1000,10 @@ def individual_log(ind, representation, current_gen):
     
     return ind_row, header
 
+
+
+
+    
 #############################################
 # Cartessian Genetic Programming ############
 #############################################
@@ -1258,6 +1407,17 @@ class CGP_Graph:
                     print(k,v)
         return {k:output_collector[i] for k,i in enumerate(self.output_gene)}
         #return output
+
+    def get_log(self):
+        if self.evaluation_skipped: eval_skipped = 1
+        else: eval_skipped = 0
+        return pd.DataFrame({"Graph_n_inputs": self.n_inputs
+            ,"Graph_n_outputs": self.n_outputs
+            ,"Graph_max_lenght": self.max_lenght
+            ,"Graph_actives": len(self.active_genotype)
+            ,"Graph_active_rate": len(self.active_genotype)/self.max_lenght
+            ,"Ind_eval_skip": eval_skipped}
+            ,index=[0])
 
     def __str__(self):
         label = "Graph:\n"

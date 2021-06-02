@@ -5,9 +5,9 @@ from datetime import datetime
 ####################################
 
 
-trials = 30
+trials = 3#30
 random_seed = 0
-dataset_name = "ion"
+dataset_name = "yst_m3"
     #Options: ion, spect, yst_m3, yst_mit, even_parity
 train_test_rate = 0.5 
     #Domain: in (0,1)
@@ -30,10 +30,10 @@ functions = ["sum","sub","mul","safe_divide_one"]
     #Options: sum, sub, mul, safe_divide_one, safe_divide_one, 
 point_mutation_percentage = 10
     #Domain: in (0,100]
-numeric_output_mapping_threshold = 0.5
+numeric_output_mapping_threshold = 0
 label_index_above_threshold = 1
 label_index_below_threshold = 0
-cgp_operator = "accum"
+cgp_operator = "sam"
     #Options: point, sam, accum, sasam,
 max_sasam_attempts = 20
     #Domain: in [1,inf)
@@ -42,8 +42,8 @@ max_sasam_attempts = 20
 # EA ###############################
 ####################################
 
-population_size = 200
-tournament_size = 5
+population_size = 200#200
+tournament_size = 2
 moea_sorting_method = "NSGAII"
     #Options: NSGAII, SPEA2, NSGAII_SP
 stopping_criteria = "fitness_evaluations"
@@ -66,12 +66,16 @@ accuracy_label_index = [0,1]
     #Conditions: must be the same length as the objective_names
 
 
+
 ####################################
 # Logs #############################
 ####################################
 
-experiment_name = dataset_name + "_" + cgp_operator + str(point_mutation_percentage) + "_" + moea_sorting_method
+experiment_name = dataset_name + "_" + cgp_operator + "_" + moea_sorting_method
+#experiment_name = "test"
 timestamp_format = ("%Y_%m_%d-%H_%M_%S")
 now = datetime.now()
 time_string = now.strftime(timestamp_format)
 output_path = ["outputs",experiment_name+"_"+time_string]
+test_logs_name = "test_logs"
+gen_logs_name = "gen_logs"
