@@ -28,6 +28,7 @@ class Individual:
     def __init__(self
             ,representation
             ,created_in_gen
+            ,semantic_indexes
             ,parent_index = None
             ,parent = None):
         """
@@ -43,18 +44,35 @@ class Individual:
         self.parent_index = parent_index
         self.parent = parent
         self.age = 0
+        self.semantic_indexes = semantic_indexes
         
-
         #Free up memory
         if self.parent is not None:
             self.parent.parent = None
 
-        #For logs
-        self.semantic_distance_from_parent = None
-        #self.damaged_semantics_from_parent = None
-        #self.improved_semantics_from_parent = None
-        #self.semantic_change_balance = None
-        self.active_nodes_diff_from_parent = None
+    def sd_from_parent(self, new_semantic_indexes = None):
+        if self.parent is None:
+            return None
+        else:
+            if new_semantic_indexes is None: semantic_indexes = self.semantic_indexes
+            else: semantic_indexes = new_semantic_indexes
+            if semantic_indexes is None: semantic_indexes = [i for i in range(len(self.semantics_all))]
+            return semantic_distance(self.semantics_all, self.parent.semantics_all, semantic_indexes = semantic_indexes)
+
+    def hd_from_parent(self, new_semantic_indexes = None):
+        if self.parent is None:
+            return None
+        else:
+            if new_semantic_indexes is None: semantic_indexes = self.semantic_indexes
+            else: semantic_indexes = new_semantic_indexes
+            if semantic_indexes is None: semantic_indexes = [i for i in range(len(self.comparable_outputs))]
+            return semantic_distance(self.comparable_outputs, self.parent.comparable_outputs, semantic_indexes = semantic_indexes)
+
+    def active_nodes_diff_from_parent(self):
+        if self.parent is None:
+            return None
+        else:
+            return abs(self.representation.n_active_nodes - self.parent.representation.n_active_nodes)/self.representation.max_lenght
 
     def update_evaluation(self,objective,value):
         self.evaluations[objective.name] = value
@@ -78,8 +96,9 @@ class Individual:
         log_dict = {
             "Generation_of_creation": self.created_in_gen
             ,"Age": self.age
-            ,"Semantic_distance_from_parent": self.semantic_distance_from_parent
-            ,"Active_nodes_diff_from_parent": self.active_nodes_diff_from_parent
+            ,"Semantic_distance_from_parent": self.sd_from_parent()
+            ,"Hamming_distance_from_parent": self.hd_from_parent()
+            ,"Active_nodes_diff_from_parent": self.active_nodes_diff_from_parent()
             ,"Parent_index": self.parent_index}
         for eval_name, value in self.evaluations.items():
             log_dict[eval_name] = value
@@ -214,15 +233,17 @@ def raise_ages(population):
         ind.raise_age()
 
 #Semantics
-def semantic_distance(ind1, ind2, semantic_indexes):
+def semantic_distance(s1, s2, semantic_indexes):
     """
     Inputs
-    - ind1, ind2 (Individual instances)
+    - s1, s2 (list of numbers)
     - semantic_indexes (list of ints)
     Returns
     - (float) Average of absolute difference in semantics
     """
-    return sum([abs(ind1.semantics_all[k]-ind2.semantics_all[k]) for k in semantic_indexes]) / len(semantic_indexes)
+    assert len(s1) == len(s2)
+    #return sum([abs(ind1.semantics_all[k]-ind2.semantics_all[k]) for k in semantic_indexes]) / len(semantic_indexes)
+    return sum([abs(s1[k]-s2[k]) for k in semantic_indexes]) / len(semantic_indexes)
 
 def get_semantic_peculiarity_objective(name = "semantic_peculiarity"):
     """
@@ -454,6 +475,7 @@ def moea_population_log(population, objectives):
     #Offsprings
     offspring_logs = ind_logs.loc[ind_logs["Age"]==0]
     o_pop_size = len(offspring_logs)
+    #print("offspring head \n", offspring_logs.head())
 
     #Front
     front_pop = [ind for ind in population if ind.evaluations[front_objective.name]==1]
@@ -485,6 +507,14 @@ def moea_population_log(population, objectives):
         ,"Sd_q75": float(offspring_logs["Semantic_distance_from_parent"].quantile([0.75]))
         ,"Sd_max": max(offspring_logs["Semantic_distance_from_parent"])
         ,"Sd_min": min(offspring_logs["Semantic_distance_from_parent"])
+        ,"Avg_hamming_distance_from_parent": offspring_logs["Hamming_distance_from_parent"].mean()
+        ,"Std_hamming_distance_from_parent": stat.stdev(offspring_logs["Hamming_distance_from_parent"])
+        ,"Hd_q10": float(offspring_logs["Hamming_distance_from_parent"].quantile([0.1]))
+        ,"Hd_q25": float(offspring_logs["Hamming_distance_from_parent"].quantile([0.25]))
+        ,"Hd_q50": float(offspring_logs["Hamming_distance_from_parent"].quantile([0.5]))
+        ,"Hd_q75": float(offspring_logs["Hamming_distance_from_parent"].quantile([0.75]))
+        ,"Hd_max": max(offspring_logs["Hamming_distance_from_parent"])
+        ,"Hd_min": min(offspring_logs["Hamming_distance_from_parent"])
         ,"Avg_active_nodes_diff_from_parent": offspring_logs["Active_nodes_diff_from_parent"].mean()
         ,"Std_active_nodes_diff_from_parent": stat.stdev(offspring_logs["Active_nodes_diff_from_parent"])
         ,"Fitness_evals": o_pop_size - offspring_logs["Ind_eval_skip"].sum()
@@ -1346,6 +1376,7 @@ class CGP_Graph:
         self.n_available_connections = self.max_lenght + self.n_inputs
         self.active_genotype = {}
         self.evaluation_skipped = False
+        self.n_active_nodes = None
 
     def copy(self):
         the_copy = CGP_Graph(genotype = {k:v.copy() for k,v in self.genotype.items()}
@@ -1374,6 +1405,7 @@ class CGP_Graph:
                 self.genotype[p].active = True 
         
         self.active_genotype = {k:v for k,v in self.genotype.items() if v.active}
+        self.n_active_nodes = len(self.active_genotype)
 
     def evaluate(self, data_row=None, show_collector=False):
         """
@@ -1414,8 +1446,8 @@ class CGP_Graph:
         return pd.DataFrame({"Graph_n_inputs": self.n_inputs
             ,"Graph_n_outputs": self.n_outputs
             ,"Graph_max_lenght": self.max_lenght
-            ,"Graph_actives": len(self.active_genotype)
-            ,"Graph_active_rate": len(self.active_genotype)/self.max_lenght
+            ,"Graph_actives": self.n_active_nodes
+            ,"Graph_active_rate": self.n_active_nodes/self.max_lenght
             ,"Ind_eval_skip": eval_skipped}
             ,index=[0])
 

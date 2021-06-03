@@ -1,0 +1,8 @@
+python experiment_sample.py experiments.param_files.p_ion_sam_nsgaii
+python experiment_sample.py experiments.param_files.p_ion_sam_nsgaii_sp
+python experiment_sample.py experiments.param_files.p_spect_sam_nsgaii
+python experiment_sample.py experiments.param_files.p_spect_sam_nsgaii_sp
+python experiment_sample.py experiments.param_files.p_yst_m3_sam_nsgaii
+python experiment_sample.py experiments.param_files.p_yst_m3_sam_nsgaii_sp
+python experiment_sample.py experiments.param_files.p_yst_mit_sam_nsgaii
+python experiment_sample.py experiments.param_files.p_yst_mit_sam_nsgaii_sp
